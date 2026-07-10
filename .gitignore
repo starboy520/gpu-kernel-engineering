@@ -1,6 +1,7 @@
 # Build directories
 /build/
 **/build/
+/.worktrees/
 
 # Compiled objects, libraries, and binaries
 *.o
