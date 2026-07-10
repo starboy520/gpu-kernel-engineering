@@ -305,9 +305,25 @@ void test_input_generation_is_deterministic_and_bounded() {
     }
 }
 
-void test_registry_is_empty() {
-    check(gemm::registered_kernels().empty(), "initial registry is empty");
-    check(gemm::find_kernel("naive") == nullptr, "unknown kernel returns nullptr");
+void test_registry_contains_only_naive() {
+    const std::vector<gemm::KernelDescriptor> kernels = gemm::registered_kernels();
+    check(kernels.size() == 1, "registry contains exactly one kernel");
+    if (kernels.size() == 1) {
+      check(std::string_view(kernels[0].name) == "naive",
+          "registered kernel is naive");
+      check(kernels[0].launch == gemm::launch_naive,
+          "naive descriptor uses launch_naive");
+      check(kernels[0].author_kernel, "naive is marked as an author kernel");
+    }
+
+    const gemm::KernelDescriptor* first = gemm::find_kernel("naive");
+    const gemm::KernelDescriptor* second = gemm::find_kernel("naive");
+    check(first != nullptr, "find_kernel locates naive");
+    check(first == second, "find_kernel returns a stable descriptor pointer");
+    check(gemm::find_kernel("Naive") == nullptr,
+        "kernel lookup is case-sensitive");
+    check(gemm::find_kernel("missing") == nullptr,
+        "unknown kernel returns nullptr");
 }
 
 void test_scoped_binding_restores_previous_pointer() {
@@ -333,28 +349,28 @@ void test_scoped_binding_restores_previous_pointer() {
 void test_gpu_free_cli_paths() {
     std::ostringstream help_output;
     check(gemm::run(parse({"gemm_runner", "--help"}), help_output) == 0,
-        "help succeeds");
+                    "help succeeds");
     check(help_output.str().find("--warmup <count>       Default: 5") !=
           std::string::npos,
-        "help documents warmup default");
+                    "help documents warmup default");
     check(help_output.str().find("Validate mode reports latency_ms=0 and gflops=0") !=
           std::string::npos,
-        "help documents validate timing fields");
+                    "help documents validate timing fields");
 
     std::ostringstream list_output;
     check(gemm::run(parse({"gemm_runner", "--list"}), list_output) == 0,
-        "empty list succeeds");
-    check(list_output.str() == "No kernels registered.\n",
-        "empty list is explicit");
+                    "kernel list succeeds");
+        check(list_output.str() == "naive\n",
+                    "kernel list contains exactly naive");
 
     std::ostringstream unknown_output;
     check_throws(
-      [&] {
-        gemm::run(parse({"gemm_runner", "--kernel", "naive", "--m", "17",
-                     "--n", "19", "--k", "23", "--mode", "validate"}),
-                unknown_output);
-      },
-      "unknown kernel: naive", "unknown kernel before GPU work");
+                [&] {
+                        gemm::run(parse({"gemm_runner", "--kernel", "missing", "--m", "17",
+                                                         "--n", "19", "--k", "23", "--mode", "validate"}),
+                                            unknown_output);
+                },
+                "unknown kernel: missing", "unknown kernel before GPU work");
 }
 
 void test_validate_mode_accepts_test_local_kernel_and_reports_pass() {
@@ -503,7 +519,7 @@ int main() {
     test_option_validation();
     test_checked_multiply();
     test_input_generation_is_deterministic_and_bounded();
-    test_registry_is_empty();
+    test_registry_contains_only_naive();
     test_scoped_binding_restores_previous_pointer();
     test_gpu_free_cli_paths();
     test_validate_mode_accepts_test_local_kernel_and_reports_pass();

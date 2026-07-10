@@ -1,13 +1,28 @@
 #include "gemm/kernel.hpp"
 
+#include <array>
+
+namespace {
+
+const std::array<gemm::KernelDescriptor, 1> kernel_table{{
+    {"naive", gemm::launch_naive, true},
+}};
+
+}  // namespace
+
 namespace gemm {
 
-const KernelDescriptor* find_kernel(std::string_view) {
+const KernelDescriptor* find_kernel(std::string_view name) {
+    for (const KernelDescriptor& kernel : kernel_table) {
+        if (name == kernel.name) {
+            return &kernel;
+        }
+    }
     return nullptr;
 }
 
 std::vector<KernelDescriptor> registered_kernels() {
-    return {};
+    return {kernel_table.begin(), kernel_table.end()};
 }
 
 }  // namespace gemm

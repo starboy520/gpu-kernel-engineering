@@ -31,6 +31,14 @@ struct KernelDescriptor {
     bool author_kernel;
 };
 
+
+LaunchResult launch_naive(
+    const float* a,
+    const float* b,
+    float* c,
+    Problem problem,
+    cudaStream_t stream);
+
 const KernelDescriptor* find_kernel(std::string_view name);
 std::vector<KernelDescriptor> registered_kernels();
 

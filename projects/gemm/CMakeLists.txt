@@ -1,5 +1,25 @@
 find_package(CUDAToolkit REQUIRED)
 
+add_library(gemm_kernels STATIC
+    kernels/naive.cu
+)
+
+target_include_directories(gemm_kernels
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(gemm_kernels
+    PUBLIC
+        CUDA::cudart
+)
+
+target_compile_options(gemm_kernels
+    PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3;-lineinfo;-Xptxas=-warn-spills;-Xcompiler=-Wall,-Wextra>
+)
+
 add_library(gemm_common STATIC
     common/reference.cpp
     common/validation.cpp
@@ -63,6 +83,7 @@ add_executable(gemm_runner_tests
 target_link_libraries(gemm_runner_tests
     PRIVATE
         gemm_runner_support
+        gemm_kernels
 )
 
 target_compile_options(gemm_runner_tests
@@ -80,10 +101,20 @@ add_executable(gemm_runner
 target_link_libraries(gemm_runner
     PRIVATE
         gemm_runner_support
+        gemm_kernels
 )
 
 target_compile_options(gemm_runner
     PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>
-    $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall,-Wextra>
+        $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-Wall,-Wextra>
+)
+
+add_test(
+    NAME gemm_naive_rectangular_validate
+    COMMAND gemm_runner --kernel naive --m 17 --n 19 --k 23 --mode validate
+)
+
+set_tests_properties(gemm_naive_rectangular_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=naive path=naive shape=17x19x23 status=PASS"
 )
