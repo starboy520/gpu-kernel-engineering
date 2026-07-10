@@ -1,0 +1,12 @@
+kernel,m,n,k,expected_path
+all,1,1,1,any
+all,2,3,4,any
+all,17,19,23,any
+all,31,32,33,any
+all,32,32,32,any
+all,33,65,17,any
+all,63,64,65,any
+all,64,64,64,any
+all,65,127,130,any
+all,127,130,33,any
+all,130,127,65,any
