@@ -36,3 +36,7 @@ __pycache__/
 # Generated GEMM reports
 /projects/gemm/results/generated/**/*.md
 /projects/gemm/results/generated/*.md
+
+# Nsight Compute and SASS reproduction outputs
+/projects/gemm/results/profiles/
+/projects/gemm/results/sass/

@@ -31,6 +31,8 @@
 projects/gemm/scripts/validate.sh
 projects/gemm/scripts/sanitize.sh quick
 projects/gemm/scripts/sanitize.sh full
+projects/gemm/scripts/profile.sh vectorized
+projects/gemm/scripts/extract_sass.sh vectorized
 ```
 
 `validate.sh` 先运行完整 CTest，再读取 `projects/gemm/tests/correctness_cases.csv`。`kernel=all` 会展开为 `naive`、`shared`、`register`、`vectorized`、`async-16b` 五个作者实现，不包含 cuBLAS；具名行只运行指定实现。每次 runner 调用都使用 `--mode validate --warmup 1 --iterations 1`，并检查退出码、`status=PASS`，以及具名用例要求的精确 `path=` token。当前 CSV 共执行 59 次 runner 对拍。
@@ -76,6 +78,34 @@ projects/gemm/scripts/benchmark.sh
 非正式协议默认写入 `projects/gemm/results/raw/smoke.csv` 和 `projects/gemm/results/generated/smoke.md`，不会覆盖 canonical 正式结果。需要自定义路径时可设置 `GEMM_OUTPUT_CSV` 和 `GEMM_OUTPUT_MD`。
 
 正式结果会写入 `projects/gemm/results/raw/a100-fp32.csv`，随后自动生成 `projects/gemm/results/generated/a100-fp32.md`。对外引用性能数字时，以这条脚本产物为准，不手工拼接或摘抄临时日志。
+
+### Profiler 与 SASS 复现
+
+`profile.sh` 默认使用 `2048×2048×2048`、validate 模式、`warmup=0`，并通过 demangled kernel regex 只采集一次目标 kernel launch。完整报告和可读文本分别写入 `projects/gemm/results/profiles/<kernel>-<shape>.ncu-rep` 与同名 `.txt`：
+
+```bash
+projects/gemm/scripts/profile.sh shared
+projects/gemm/scripts/profile.sh register 2048 2048 2048
+projects/gemm/scripts/profile.sh vectorized 2048 2048 2048
+projects/gemm/scripts/profile.sh async-16b 2048 2048 2048
+```
+
+需要覆盖默认 runner 时设置 `GEMM_RUNNER`：
+
+```bash
+GEMM_RUNNER=/path/to/gemm_runner \
+	projects/gemm/scripts/profile.sh async-16b 2048 2048 2048
+```
+
+`extract_sass.sh` 从完整 `cuobjdump --dump-sass` 输出中切出目标函数，保存完整函数 SASS，并生成可提交的小型 opcode 计数与宽加载/异步指令片段：
+
+```bash
+projects/gemm/scripts/extract_sass.sh vectorized
+projects/gemm/scripts/extract_sass.sh async-16b
+projects/gemm/scripts/extract_sass.sh vectorized /path/to/gemm_runner
+```
+
+完整 report、文本和 `.sass` 都是 gitignored 诊断产物；紧凑证据位于 `projects/gemm/results/evidence/`。采集协议、指标解释和 Async 负结果见 [GEMM 性能实验方法](docs/methodology.md)。
 
 两个脚本都接受自定义 runner 路径：
 
