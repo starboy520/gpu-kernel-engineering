@@ -10,3 +10,7 @@ all,64,64,64,any
 all,65,127,130,any
 all,127,130,33,any
 all,130,127,65,any
+vectorized,65,128,48,fast-float4
+vectorized,65,130,48,fallback-register
+async-16b,65,128,48,fast-pipeline-16b
+async-16b,65,130,48,fallback-register
