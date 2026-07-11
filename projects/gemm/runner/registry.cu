@@ -4,17 +4,18 @@
 
 namespace {
 
-const std::array<gemm::KernelDescriptor, 2> kernel_table{{
+const std::array<gemm::KernelDescriptor, 3> kernel_table{{
     {"naive", gemm::launch_naive, true},
     {"shared", gemm::launch_shared_tiled, true},
+    {"register", gemm::launch_register_tiled, true},
 }};
 
-}  // namespace
+} // namespace
 
 namespace gemm {
 
-const KernelDescriptor* find_kernel(std::string_view name) {
-    for (const KernelDescriptor& kernel : kernel_table) {
+const KernelDescriptor *find_kernel(std::string_view name) {
+    for (const KernelDescriptor &kernel : kernel_table) {
         if (name == kernel.name) {
             return &kernel;
         }
@@ -26,4 +27,4 @@ std::vector<KernelDescriptor> registered_kernels() {
     return {kernel_table.begin(), kernel_table.end()};
 }
 
-}  // namespace gemm
+} // namespace gemm

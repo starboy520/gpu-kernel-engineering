@@ -38,6 +38,9 @@ LaunchResult launch_naive(const float *a, const float *b, float *c,
 LaunchResult launch_shared_tiled(const float *a, const float *b, float *c,
                                  Problem problem, cudaStream_t stream);
 
+LaunchResult launch_register_tiled(const float *a, const float *b, float *c,
+                                   Problem problem, cudaStream_t stream);
+
 const KernelDescriptor *find_kernel(std::string_view name);
 std::vector<KernelDescriptor> registered_kernels();
 

@@ -3,6 +3,7 @@ find_package(CUDAToolkit REQUIRED)
 add_library(gemm_kernels STATIC
     kernels/naive.cu
     kernels/shared_tiled.cu
+    kernels/register_tiled.cu
 )
 
 target_include_directories(gemm_kernels
@@ -136,4 +137,22 @@ add_test(
 
 set_tests_properties(gemm_shared_k_tail_validate PROPERTIES
     PASS_REGULAR_EXPRESSION "kernel=shared path=shared shape=33x65x17 status=PASS"
+)
+
+add_test(
+    NAME gemm_register_single_tile_validate
+    COMMAND gemm_runner --kernel register --m 64 --n 64 --k 16 --mode validate
+)
+
+set_tests_properties(gemm_register_single_tile_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=register path=register shape=64x64x16 status=PASS"
+)
+
+add_test(
+    NAME gemm_register_rectangular_tail_validate
+    COMMAND gemm_runner --kernel register --m 65 --n 127 --k 33 --mode validate
+)
+
+set_tests_properties(gemm_register_rectangular_tail_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=register path=register shape=65x127x33 status=PASS"
 )
