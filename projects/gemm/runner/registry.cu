@@ -4,11 +4,12 @@
 
 namespace {
 
-const std::array<gemm::KernelDescriptor, 5> kernel_table{{
+const std::array<gemm::KernelDescriptor, 6> kernel_table{{
     {"naive", gemm::launch_naive, true},
     {"shared", gemm::launch_shared_tiled, true},
     {"register", gemm::launch_register_tiled, true},
     {"vectorized", gemm::launch_vectorized_tiled, true},
+    {"async-16b", gemm::launch_double_buffer, true},
     {"cublas-fp32", gemm::launch_cublas_fp32, false},
 }};
 

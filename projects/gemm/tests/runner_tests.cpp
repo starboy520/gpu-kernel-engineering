@@ -362,8 +362,8 @@ void test_input_generation_is_deterministic_and_bounded() {
 
 void test_registry_contains_author_kernels_then_cublas_baseline() {
     const std::vector<gemm::KernelDescriptor> kernels = gemm::registered_kernels();
-    check(kernels.size() == 5, "registry contains exactly five kernels");
-    if (kernels.size() == 5) {
+    check(kernels.size() == 6, "registry contains exactly six kernels");
+    if (kernels.size() == 6) {
           check(std::string_view(kernels[0].name) == "naive",
               "first registered kernel is naive");
           check(kernels[0].launch == gemm::launch_naive,
@@ -385,11 +385,17 @@ void test_registry_contains_author_kernels_then_cublas_baseline() {
               "vectorized descriptor uses launch_vectorized_tiled");
           check(kernels[3].author_kernel,
               "vectorized is marked as an author kernel");
-          check(std::string_view(kernels[4].name) == "cublas-fp32",
-              "fifth registered kernel is cublas-fp32");
-          check(kernels[4].launch == gemm::launch_cublas_fp32,
+          check(std::string_view(kernels[4].name) == "async-16b",
+              "fifth registered kernel is async-16b");
+          check(kernels[4].launch == gemm::launch_double_buffer,
+              "async descriptor uses launch_double_buffer");
+          check(kernels[4].author_kernel,
+              "async-16b is marked as an author kernel");
+          check(std::string_view(kernels[5].name) == "cublas-fp32",
+              "sixth registered kernel is cublas-fp32");
+          check(kernels[5].launch == gemm::launch_cublas_fp32,
               "cublas descriptor uses launch_cublas_fp32");
-          check(!kernels[4].author_kernel,
+          check(!kernels[5].author_kernel,
               "cublas is marked as a vendor baseline");
     }
 
@@ -413,6 +419,11 @@ void test_registry_contains_author_kernels_then_cublas_baseline() {
     check(vectorized_first != nullptr, "find_kernel locates vectorized");
     check(vectorized_first == vectorized_second,
         "find_kernel returns a stable vectorized descriptor pointer");
+    const gemm::KernelDescriptor* async_first = gemm::find_kernel("async-16b");
+    const gemm::KernelDescriptor* async_second = gemm::find_kernel("async-16b");
+    check(async_first != nullptr, "find_kernel locates async-16b");
+    check(async_first == async_second,
+        "find_kernel returns a stable async descriptor pointer");
     const gemm::KernelDescriptor* cublas_first = gemm::find_kernel("cublas-fp32");
     const gemm::KernelDescriptor* cublas_second = gemm::find_kernel("cublas-fp32");
     check(cublas_first != nullptr, "find_kernel locates cublas-fp32");
@@ -426,6 +437,8 @@ void test_registry_contains_author_kernels_then_cublas_baseline() {
         "register kernel lookup is case-sensitive");
     check(gemm::find_kernel("Vectorized") == nullptr,
         "vectorized kernel lookup is case-sensitive");
+    check(gemm::find_kernel("ASYNC-16B") == nullptr,
+        "async kernel lookup is case-sensitive");
     check(gemm::find_kernel("CUBLAS-FP32") == nullptr,
         "cublas kernel lookup is case-sensitive");
     check(gemm::find_kernel("missing") == nullptr,
@@ -467,7 +480,7 @@ void test_gpu_free_cli_paths() {
     check(gemm::run(parse({"gemm_runner", "--list"}), list_output) == 0,
                     "kernel list succeeds");
     check(list_output.str() ==
-              "naive\nshared\nregister\nvectorized\ncublas-fp32\n",
+              "naive\nshared\nregister\nvectorized\nasync-16b\ncublas-fp32\n",
           "kernel list contains author kernels followed by cublas-fp32");
 
     std::ostringstream unknown_output;

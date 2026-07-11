@@ -42,6 +42,8 @@ LaunchResult launch_register_tiled(const float *a, const float *b, float *c,
                                    Problem problem, cudaStream_t stream);
 LaunchResult launch_vectorized_tiled(const float *a, const float *b, float *c,
                                      Problem problem, cudaStream_t stream);
+LaunchResult launch_double_buffer(const float *a, const float *b, float *c,
+                                  Problem problem, cudaStream_t stream);
 
 LaunchResult launch_cublas_fp32(const float *a, const float *b, float *c,
                                 Problem problem, cudaStream_t stream);

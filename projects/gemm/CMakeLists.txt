@@ -5,6 +5,7 @@ add_library(gemm_kernels STATIC
     kernels/shared_tiled.cu
     kernels/register_tiled.cu
     kernels/vectorized.cu
+    kernels/double_buffer.cu
 )
 
 target_include_directories(gemm_kernels
@@ -218,6 +219,51 @@ add_test(
 
 set_tests_properties(gemm_vectorized_k_nonmultiple_fallback_validate PROPERTIES
     PASS_REGULAR_EXPRESSION "kernel=vectorized path=fallback-register shape=128x128x130 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_async_16b_single_tile_validate
+    COMMAND gemm_runner --kernel async-16b --m 64 --n 64 --k 16 --mode validate
+)
+
+set_tests_properties(gemm_async_16b_single_tile_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=async-16b path=fast-pipeline-16b shape=64x64x16 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_async_16b_m_tail_multitile_validate
+    COMMAND gemm_runner --kernel async-16b --m 65 --n 128 --k 32 --mode validate
+)
+
+set_tests_properties(gemm_async_16b_m_tail_multitile_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=async-16b path=fast-pipeline-16b shape=65x128x32 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_async_16b_stage_reuse_validate
+    COMMAND gemm_runner --kernel async-16b --m 65 --n 128 --k 48 --mode validate
+)
+
+set_tests_properties(gemm_async_16b_stage_reuse_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=async-16b path=fast-pipeline-16b shape=65x128x48 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_async_16b_n_nonmultiple_fallback_validate
+    COMMAND gemm_runner --kernel async-16b --m 128 --n 130 --k 128 --mode validate
+)
+
+set_tests_properties(gemm_async_16b_n_nonmultiple_fallback_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=async-16b path=fallback-register shape=128x130x128 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_async_16b_k_nonmultiple_fallback_validate
+    COMMAND gemm_runner --kernel async-16b --m 128 --n 128 --k 130 --mode validate
+)
+
+set_tests_properties(gemm_async_16b_k_nonmultiple_fallback_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=async-16b path=fallback-register shape=128x128x130 status=PASS.*reference=cpu"
 )
 
 add_test(
