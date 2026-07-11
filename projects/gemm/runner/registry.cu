@@ -4,8 +4,9 @@
 
 namespace {
 
-const std::array<gemm::KernelDescriptor, 1> kernel_table{{
+const std::array<gemm::KernelDescriptor, 2> kernel_table{{
     {"naive", gemm::launch_naive, true},
+    {"shared", gemm::launch_shared_tiled, true},
 }};
 
 }  // namespace

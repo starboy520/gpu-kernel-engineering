@@ -305,23 +305,36 @@ void test_input_generation_is_deterministic_and_bounded() {
     }
 }
 
-void test_registry_contains_only_naive() {
+void test_registry_contains_naive_and_shared() {
     const std::vector<gemm::KernelDescriptor> kernels = gemm::registered_kernels();
-    check(kernels.size() == 1, "registry contains exactly one kernel");
-    if (kernels.size() == 1) {
+    check(kernels.size() == 2, "registry contains exactly two kernels");
+    if (kernels.size() == 2) {
       check(std::string_view(kernels[0].name) == "naive",
-          "registered kernel is naive");
+          "first registered kernel is naive");
       check(kernels[0].launch == gemm::launch_naive,
           "naive descriptor uses launch_naive");
       check(kernels[0].author_kernel, "naive is marked as an author kernel");
+      check(std::string_view(kernels[1].name) == "shared",
+          "second registered kernel is shared");
+      check(kernels[1].launch == gemm::launch_shared_tiled,
+          "shared descriptor uses launch_shared_tiled");
+      check(kernels[1].author_kernel, "shared is marked as an author kernel");
     }
 
-    const gemm::KernelDescriptor* first = gemm::find_kernel("naive");
-    const gemm::KernelDescriptor* second = gemm::find_kernel("naive");
-    check(first != nullptr, "find_kernel locates naive");
-    check(first == second, "find_kernel returns a stable descriptor pointer");
+    const gemm::KernelDescriptor* naive_first = gemm::find_kernel("naive");
+    const gemm::KernelDescriptor* naive_second = gemm::find_kernel("naive");
+    check(naive_first != nullptr, "find_kernel locates naive");
+    check(naive_first == naive_second,
+        "find_kernel returns a stable naive descriptor pointer");
+    const gemm::KernelDescriptor* shared_first = gemm::find_kernel("shared");
+    const gemm::KernelDescriptor* shared_second = gemm::find_kernel("shared");
+    check(shared_first != nullptr, "find_kernel locates shared");
+    check(shared_first == shared_second,
+        "find_kernel returns a stable shared descriptor pointer");
     check(gemm::find_kernel("Naive") == nullptr,
         "kernel lookup is case-sensitive");
+    check(gemm::find_kernel("Shared") == nullptr,
+        "shared kernel lookup is case-sensitive");
     check(gemm::find_kernel("missing") == nullptr,
         "unknown kernel returns nullptr");
 }
@@ -360,8 +373,8 @@ void test_gpu_free_cli_paths() {
     std::ostringstream list_output;
     check(gemm::run(parse({"gemm_runner", "--list"}), list_output) == 0,
                     "kernel list succeeds");
-        check(list_output.str() == "naive\n",
-                    "kernel list contains exactly naive");
+        check(list_output.str() == "naive\nshared\n",
+                "kernel list contains exactly naive and shared");
 
     std::ostringstream unknown_output;
     check_throws(
@@ -519,7 +532,7 @@ int main() {
     test_option_validation();
     test_checked_multiply();
     test_input_generation_is_deterministic_and_bounded();
-    test_registry_contains_only_naive();
+    test_registry_contains_naive_and_shared();
     test_scoped_binding_restores_previous_pointer();
     test_gpu_free_cli_paths();
     test_validate_mode_accepts_test_local_kernel_and_reports_pass();

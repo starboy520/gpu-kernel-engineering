@@ -2,6 +2,7 @@ find_package(CUDAToolkit REQUIRED)
 
 add_library(gemm_kernels STATIC
     kernels/naive.cu
+    kernels/shared_tiled.cu
 )
 
 target_include_directories(gemm_kernels
@@ -117,4 +118,22 @@ add_test(
 
 set_tests_properties(gemm_naive_rectangular_validate PROPERTIES
     PASS_REGULAR_EXPRESSION "kernel=naive path=naive shape=17x19x23 status=PASS"
+)
+
+add_test(
+    NAME gemm_shared_rectangular_validate
+    COMMAND gemm_runner --kernel shared --m 17 --n 19 --k 23 --mode validate
+)
+
+set_tests_properties(gemm_shared_rectangular_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=shared path=shared shape=17x19x23 status=PASS"
+)
+
+add_test(
+    NAME gemm_shared_k_tail_validate
+    COMMAND gemm_runner --kernel shared --m 33 --n 65 --k 17 --mode validate
+)
+
+set_tests_properties(gemm_shared_k_tail_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=shared path=shared shape=33x65x17 status=PASS"
 )

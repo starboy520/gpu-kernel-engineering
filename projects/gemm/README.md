@@ -10,8 +10,8 @@
 
 ## 实现顺序
 
-1. Naive
-2. Shared memory tiling
+1. [Naive](docs/naive.md)
+2. [Shared memory tiling](docs/shared-tiled.md)
 3. 2D register tiling
 4. `float4` 向量化加载
 5. `cp.async` 双缓冲
