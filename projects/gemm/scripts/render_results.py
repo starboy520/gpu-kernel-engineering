@@ -74,6 +74,17 @@ def format_cublas_share(current_gflops: float, cublas_gflops: float | None) -> s
     return f"{100.0 * current_gflops / cublas_gflops:.1f}%"
 
 
+def portable_source_path(source_csv: str) -> str:
+    normalized = source_csv.replace(os.sep, "/")
+    if normalized.startswith("projects/gemm/"):
+        return normalized
+    marker = f"{os.sep}projects{os.sep}gemm{os.sep}"
+    if marker in source_csv:
+        suffix = source_csv.split(marker, 1)[1]
+        return f"projects/gemm/{suffix.replace(os.sep, '/')}"
+    return os.path.basename(source_csv)
+
+
 def render_markdown(rows: list[dict[str, str]], source_csv: str) -> str:
     grouped: dict[tuple[int, int, int], dict[str, dict[str, str]]] = defaultdict(dict)
     for row in rows:
@@ -82,7 +93,7 @@ def render_markdown(rows: list[dict[str, str]], source_csv: str) -> str:
     lines = [
         "# A100 FP32 GEMM 基准结果",
         "",
-        f"来源 CSV：`{source_csv}`",
+        f"来源 CSV：`{portable_source_path(source_csv)}`",
         "",
         "说明：只渲染 CSV 中真实存在的行，不为缺失 kernel 补值；`Path` 表示运行时实际选择的实现路径，`Reference` 表示正确性对拍来源。",
         "",

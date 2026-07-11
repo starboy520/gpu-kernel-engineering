@@ -73,3 +73,26 @@ Nsight Compute 会锁定 GPU 时钟，并为了采集不同 counter 对同一次
 4. **wall-clock 是否改善？** 用正式 benchmark 中位数确认 profiler 改善是否转化为端到端收益。
 
 Async 16B 是需要保留的负结果：128-bit `LDGSTS` 已生成，long scoreboard 也显著下降，但最终 wall-clock 仍比 Vectorized 慢约 4.7%。这不是失败数据，不应删除或只展示局部利好。shared-memory swizzle 需要同时满足 16B async-copy 对齐和新的 bank 映射，首版明确延后；若继续实验，应先只改变 A 的 shared layout，再按同一协议重新回答上面的四个问题。
+
+## 正式 A100 数据集
+
+首版正式结果由 `projects/gemm/scripts/benchmark.sh` 在干净工作树上生成，测试代码 commit 为：
+
+```text
+505f7895e34585d3b0daac24e2fa245f624b4890
+```
+
+环境与协议：
+
+```text
+GPU：NVIDIA A100 80GB PCIe
+CUDA / nvcc：13.3 / 13.3.33
+shape：512³、1024³、2048³
+warmup：10
+iterations：50
+repeats：3
+统计量：每个 kernel + shape 的 latency 中位数
+seed：1234
+```
+
+canonical 数据保存在 `projects/gemm/results/raw/a100-fp32.csv`，展示表由脚本生成到 `projects/gemm/results/generated/a100-fp32.md`。CSV 中包含实际执行路径、reference 来源、误差、工具链和 Git commit；对外引用性能数字时以 canonical CSV 为准。
