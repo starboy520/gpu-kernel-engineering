@@ -3,8 +3,11 @@
 #include "gemm/reference.hpp"
 #include "gemm/runner.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <limits>
 #include <sstream>
@@ -17,6 +20,8 @@ namespace {
 int failures = 0;
 int cuda_evaluations = 0;
 int cublas_evaluations = 0;
+int large_reference_evaluations = 0;
+int scripted_d2h_evaluations = 0;
 
 struct FakeKernelState {
     int launches = 0;
@@ -105,6 +110,13 @@ cudaError_t counting_memcpy_d2h(void*, const void*, std::size_t) {
     return cudaSuccess;
 }
 
+cudaError_t scripted_memcpy_d2h(void* destination, const void*, std::size_t bytes) {
+    const float value = scripted_d2h_evaluations++ == 0 ? 1.0F : 1.01F;
+    float* output = static_cast<float*>(destination);
+    std::fill(output, output + bytes / sizeof(float), value);
+    return cudaSuccess;
+}
+
 cudaError_t counting_peek_at_last_error() {
     return cudaSuccess;
 }
@@ -135,6 +147,49 @@ cudaError_t counting_event_elapsed_time(float* milliseconds, cudaEvent_t,
         *milliseconds = 0.0F;
     }
     return cudaSuccess;
+}
+
+cudaError_t host_malloc(void** pointer, std::size_t bytes) {
+    *pointer = std::malloc(bytes);
+    return *pointer == nullptr ? cudaErrorMemoryAllocation : cudaSuccess;
+}
+
+cudaError_t host_free(void* pointer) {
+    std::free(pointer);
+    return cudaSuccess;
+}
+
+cudaError_t host_memcpy(void* destination, const void* source, std::size_t bytes) {
+    std::memcpy(destination, source, bytes);
+    return cudaSuccess;
+}
+
+void fake_large_reference(const float*, const float*, float* c,
+                          gemm::Problem problem, cudaStream_t) {
+    ++large_reference_evaluations;
+    const std::size_t count = static_cast<std::size_t>(problem.m) *
+                              static_cast<std::size_t>(problem.n);
+    std::fill(c, c + count, 0.0F);
+}
+
+void fake_counting_large_reference(const float*, const float*, float*,
+                                   gemm::Problem, cudaStream_t) {
+    ++large_reference_evaluations;
+}
+
+gemm::LaunchResult fake_zero_launcher(const float*, const float*, float* c,
+                                      gemm::Problem problem, cudaStream_t) {
+    const std::size_t count = static_cast<std::size_t>(problem.m) *
+                              static_cast<std::size_t>(problem.n);
+    std::fill(c, c + count, 0.0F);
+    return {"fake_zero", false};
+}
+
+gemm::LaunchResult fake_biased_launcher(const float*, const float*, float* c,
+                                        gemm::Problem problem, cudaStream_t) {
+    (void)c;
+    (void)problem;
+    return {"fake_biased", false};
 }
 
 }  // namespace
@@ -305,26 +360,31 @@ void test_input_generation_is_deterministic_and_bounded() {
     }
 }
 
-void test_registry_contains_naive_shared_and_register() {
+void test_registry_contains_author_kernels_then_cublas_baseline() {
     const std::vector<gemm::KernelDescriptor> kernels = gemm::registered_kernels();
-    check(kernels.size() == 3, "registry contains exactly three kernels");
-    if (kernels.size() == 3) {
-      check(std::string_view(kernels[0].name) == "naive",
-          "first registered kernel is naive");
-      check(kernels[0].launch == gemm::launch_naive,
-          "naive descriptor uses launch_naive");
-      check(kernels[0].author_kernel, "naive is marked as an author kernel");
-      check(std::string_view(kernels[1].name) == "shared",
-          "second registered kernel is shared");
-      check(kernels[1].launch == gemm::launch_shared_tiled,
-          "shared descriptor uses launch_shared_tiled");
-      check(kernels[1].author_kernel, "shared is marked as an author kernel");
-      check(std::string_view(kernels[2].name) == "register",
-          "third registered kernel is register");
-      check(kernels[2].launch == gemm::launch_register_tiled,
-          "register descriptor uses launch_register_tiled");
-      check(kernels[2].author_kernel,
-          "register is marked as an author kernel");
+    check(kernels.size() == 4, "registry contains exactly four kernels");
+    if (kernels.size() == 4) {
+        check(std::string_view(kernels[0].name) == "naive",
+              "first registered kernel is naive");
+        check(kernels[0].launch == gemm::launch_naive,
+              "naive descriptor uses launch_naive");
+        check(kernels[0].author_kernel, "naive is marked as an author kernel");
+        check(std::string_view(kernels[1].name) == "shared",
+              "second registered kernel is shared");
+        check(kernels[1].launch == gemm::launch_shared_tiled,
+              "shared descriptor uses launch_shared_tiled");
+        check(kernels[1].author_kernel, "shared is marked as an author kernel");
+        check(std::string_view(kernels[2].name) == "register",
+              "third registered kernel is register");
+        check(kernels[2].launch == gemm::launch_register_tiled,
+              "register descriptor uses launch_register_tiled");
+        check(kernels[2].author_kernel, "register is marked as an author kernel");
+        check(std::string_view(kernels[3].name) == "cublas-fp32",
+              "fourth registered kernel is cublas-fp32");
+        check(kernels[3].launch == gemm::launch_cublas_fp32,
+              "cublas descriptor uses launch_cublas_fp32");
+        check(!kernels[3].author_kernel,
+              "cublas is marked as a vendor baseline");
     }
 
     const gemm::KernelDescriptor* naive_first = gemm::find_kernel("naive");
@@ -342,12 +402,19 @@ void test_registry_contains_naive_shared_and_register() {
     check(register_first != nullptr, "find_kernel locates register");
     check(register_first == register_second,
         "find_kernel returns a stable register descriptor pointer");
+    const gemm::KernelDescriptor* cublas_first = gemm::find_kernel("cublas-fp32");
+    const gemm::KernelDescriptor* cublas_second = gemm::find_kernel("cublas-fp32");
+    check(cublas_first != nullptr, "find_kernel locates cublas-fp32");
+    check(cublas_first == cublas_second,
+        "find_kernel returns a stable cublas descriptor pointer");
     check(gemm::find_kernel("Naive") == nullptr,
         "kernel lookup is case-sensitive");
     check(gemm::find_kernel("Shared") == nullptr,
         "shared kernel lookup is case-sensitive");
     check(gemm::find_kernel("Register") == nullptr,
         "register kernel lookup is case-sensitive");
+    check(gemm::find_kernel("CUBLAS-FP32") == nullptr,
+        "cublas kernel lookup is case-sensitive");
     check(gemm::find_kernel("missing") == nullptr,
         "unknown kernel returns nullptr");
 }
@@ -386,8 +453,8 @@ void test_gpu_free_cli_paths() {
     std::ostringstream list_output;
     check(gemm::run(parse({"gemm_runner", "--list"}), list_output) == 0,
                     "kernel list succeeds");
-        check(list_output.str() == "naive\nshared\nregister\n",
-            "kernel list contains exactly naive, shared, and register");
+    check(list_output.str() == "naive\nshared\nregister\ncublas-fp32\n",
+          "kernel list contains author kernels followed by cublas-fp32");
 
     std::ostringstream unknown_output;
     check_throws(
@@ -422,6 +489,23 @@ void test_validate_mode_accepts_test_local_kernel_and_reports_pass() {
           "validate mode reports zero latency placeholder");
     check(text.find("gflops=0") != std::string::npos,
           "validate mode reports zero gflops placeholder");
+    check(text.find("reference=cpu") != std::string::npos,
+          "validate mode reports the CPU reference source");
+}
+
+void test_reference_selection_uses_exact_work_boundary() {
+    const int threshold = static_cast<int>(gemm::kMaxCpuReferenceWork);
+    check(runner_internal::uses_cpu_reference(gemm::Problem{1, 1, threshold - 1}),
+          "work immediately below threshold uses CPU reference");
+    check(!runner_internal::uses_cpu_reference(gemm::Problem{1, 1, threshold}),
+          "work at threshold uses large reference");
+
+    const runner_internal::ValidationTolerances large_tolerances =
+      runner_internal::validation_tolerances(false);
+    check(large_tolerances.atol == 1.0e-3,
+        "large reference uses fixed 1e-3 absolute tolerance");
+    check(large_tolerances.rtol == 2.0e-3,
+        "large reference retains fixed 2e-3 relative tolerance");
 }
 
 void test_benchmark_mode_runs_validation_then_warmups_and_iterations() {
@@ -487,6 +571,71 @@ void test_large_problem_reference_error_happens_before_allocation() {
           "large-reference failure occurs before any kernel launch");
 }
 
+void test_supplied_large_reference_handles_threshold_problem() {
+    large_reference_evaluations = 0;
+    const gemm::KernelDescriptor kernel{"fake_zero", fake_zero_launcher, false};
+    const gemm::RunnerOptions options =
+        make_run_options(gemm::RunMode::validate, 0, 1, 1000, 1000, 100);
+    const runner_internal::CudaApi api{
+        host_malloc,
+        host_free,
+        host_memcpy,
+        host_memcpy,
+        counting_peek_at_last_error,
+        counting_device_synchronize,
+        counting_event_create,
+        counting_event_destroy,
+        counting_event_record,
+        counting_event_synchronize,
+        counting_event_elapsed_time,
+    };
+
+    std::ostringstream output;
+    const int result = runner_internal::run_with_kernel(
+        options, kernel, output, api, fake_large_reference);
+    check(result == 0, "supplied large reference validates threshold problem");
+    check(large_reference_evaluations == 1,
+          "large reference is generated exactly once before validation");
+    check(output.str().find("reference=cublas-pedantic-fp32") != std::string::npos,
+          "large-reference source is visible in output");
+}
+
+void test_large_reference_rejects_globally_biased_output() {
+    scripted_d2h_evaluations = 0;
+    const gemm::KernelDescriptor kernel{"fake_biased", fake_biased_launcher, false};
+    const gemm::RunnerOptions options =
+        make_run_options(gemm::RunMode::validate, 0, 1, 500, 500, 400);
+    const runner_internal::CudaApi api{
+        counting_malloc,
+        counting_free,
+        counting_memcpy_h2d,
+        scripted_memcpy_d2h,
+        counting_peek_at_last_error,
+        counting_device_synchronize,
+        counting_event_create,
+        counting_event_destroy,
+        counting_event_record,
+        counting_event_synchronize,
+        counting_event_elapsed_time,
+    };
+
+    std::ostringstream output;
+    const int result = runner_internal::run_with_kernel(
+        options, kernel, output, api, fake_counting_large_reference);
+    check(result != 0,
+          "large reference rejects 0.01 global bias above both tolerances");
+
+    const std::string text = output.str();
+    check(text.find("status=FAIL") != std::string::npos,
+          "large-reference bias failure is visible in output");
+    check(text.find("max_abs=0.010000") != std::string::npos,
+          "large-reference bias reports the expected max_abs");
+        check(text.find("max_rel=0.010000") != std::string::npos,
+            "large-reference bias reports max_rel above 2e-3");
+    check(text.find("reference=cublas-pedantic-fp32") != std::string::npos,
+          "large-reference bias reports the reference source");
+}
+
 void test_validation_failure_returns_nonzero_and_reports_fail() {
     FakeKernelState state;
     state.delta = 0.01F;
@@ -545,12 +694,15 @@ int main() {
     test_option_validation();
     test_checked_multiply();
     test_input_generation_is_deterministic_and_bounded();
-    test_registry_contains_naive_shared_and_register();
+    test_registry_contains_author_kernels_then_cublas_baseline();
     test_scoped_binding_restores_previous_pointer();
     test_gpu_free_cli_paths();
     test_validate_mode_accepts_test_local_kernel_and_reports_pass();
+    test_reference_selection_uses_exact_work_boundary();
     test_benchmark_mode_runs_validation_then_warmups_and_iterations();
     test_large_problem_reference_error_happens_before_allocation();
+    test_supplied_large_reference_handles_threshold_problem();
+    test_large_reference_rejects_globally_biased_output();
     test_validation_failure_returns_nonzero_and_reports_fail();
     test_validation_uses_fixed_one_milli_tolerances();
 

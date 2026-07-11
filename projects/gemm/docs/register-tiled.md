@@ -234,4 +234,25 @@ $$
 
 阶段测试约快 3.5%；相对 Naive 约 1.37 倍。
 
-这仍不是正式性能数据：K 只有 64，Register 只有 256 个 blocks，且尚未加入 cuBLAS 大规模 reference。下一步会先接入 cuBLAS pedantic FP32 对拍，再测试 `2048³` 以上的 shape，并结合 ncu 判断寄存器、occupancy、shared bank conflict 和 stall。
+这组早期结果不是正式性能数据：K 只有 64，Register 只有 256 个 blocks，当时也尚未加入 cuBLAS 大规模 reference。它保留在这里，用来说明测试 shape 会怎样影响结论。
+
+## 接入 cuBLAS 后的 `2048³` 对比
+
+cuBLAS pedantic FP32 reference 接入后，Register 版本通过 `2048³` 大矩阵对拍。使用相同的 `warmup=10` 和 `iterations=50`：
+
+| 版本 | 延迟 | 性能 |
+| --- | ---: | ---: |
+| Naive | 4.697006 ms | 3.66 TFLOPS |
+| Shared tiled | 3.250483 ms | 5.29 TFLOPS |
+| Register tiled | 2.645443 ms | 6.49 TFLOPS |
+| cuBLAS pedantic FP32 | 0.973271 ms | 17.65 TFLOPS |
+
+Register 相比 Shared：
+
+$$
+\frac{6494.14}{5285.33}\approx1.229
+$$
+
+即提升约 22.9%。相比 Naive 约为 1.78 倍，达到当前 cuBLAS pedantic FP32 基线的约 36.8%。
+
+这个结果比 `384³` 更适合评价当前 kernel：`2048×2048` 会产生 `32×32=1024` 个 Register blocks，不再存在只有 36 个 blocks、无法填满 108 个 SM 的明显问题。具体性能差距仍需 ncu 验证，暂不把 bank conflict、occupancy 或 global load 指令中的任何一项直接定为主瓶颈。

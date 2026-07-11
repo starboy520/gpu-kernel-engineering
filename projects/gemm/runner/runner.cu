@@ -20,6 +20,8 @@ namespace {
 
 constexpr double kValidationAtol = 1.0e-3;
 constexpr double kValidationRtol = 1.0e-3;
+constexpr double kLargeReferenceAtol = 1.0e-3;
+constexpr double kLargeReferenceRtol = 2.0e-3;
 
 cudaError_t default_malloc(void** pointer, std::size_t bytes) {
     return cudaMalloc(pointer, bytes);
@@ -147,8 +149,9 @@ std::size_t reference_work(Problem problem) {
                             "reference work");
 }
 
-void require_reference_available(Problem problem) {
-    if (reference_work(problem) >= kMaxCpuReferenceWork) {
+void require_reference_available(Problem problem,
+                                 runner_internal::LargeReferenceFn large_reference) {
+    if (reference_work(problem) >= kMaxCpuReferenceWork && large_reference == nullptr) {
         throw std::runtime_error("large-problem reference is not available yet");
     }
 }
@@ -173,20 +176,20 @@ std::string selected_path_or_kernel_name(const LaunchResult& result,
 void print_result_line(std::ostream& output, const KernelDescriptor& kernel,
                        std::string_view selected_path, Problem problem, bool passed,
                        const ErrorMetrics& metrics, double latency_ms,
-                       double gflops) {
+                       double gflops, std::string_view reference_source) {
     output << std::fixed << std::setprecision(6) << "kernel=" << kernel.name
            << " path=" << selected_path << " shape=" << problem.m << 'x'
            << problem.n << 'x' << problem.k << " status="
            << (passed ? "PASS" : "FAIL") << " max_abs=" << metrics.max_abs
            << " max_rel=" << metrics.max_rel << " latency_ms=" << latency_ms
-           << " gflops=" << gflops << '\n';
+           << " gflops=" << gflops << " reference=" << reference_source << '\n';
 }
 
 ValidationSummary run_validation_phase(
     const RunnerOptions& options, const KernelDescriptor& kernel,
     const runner_internal::CudaApi& cuda_api, float* device_a, float* device_b,
     float* device_c, const std::vector<float>& expected,
-    std::vector<float>& actual) {
+    std::vector<float>& actual, double atol, double rtol) {
     std::string selected_path = kernel.name;
     for (int warmup = 0; warmup < options.warmup; ++warmup) {
         selected_path = selected_path_or_kernel_name(
@@ -203,7 +206,7 @@ ValidationSummary run_validation_phase(
 
     const ErrorMetrics metrics = compare(expected.data(), actual.data(), actual.size());
     return ValidationSummary{metrics, selected_path,
-                             passes(metrics, kValidationAtol, kValidationRtol)};
+                             passes(metrics, atol, rtol)};
 }
 
 double compute_gflops(Problem problem, double average_ms) {
@@ -399,16 +402,34 @@ int run(const RunnerOptions& options, std::ostream& output) {
 
 namespace runner_internal {
 
+bool uses_cpu_reference(Problem problem) {
+    return reference_work(problem) < kMaxCpuReferenceWork;
+}
+
+ValidationTolerances validation_tolerances(bool cpu_reference) {
+    return cpu_reference
+               ? ValidationTolerances{kValidationAtol, kValidationRtol}
+               : ValidationTolerances{kLargeReferenceAtol, kLargeReferenceRtol};
+}
+
 int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel,
                     std::ostream& output) {
-    return run_with_kernel(options, kernel, output, default_cuda_api());
+    return run_with_kernel(options, kernel, output, default_cuda_api(),
+                           reference_cublas_device);
 }
 
 int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel,
                     std::ostream& output, const CudaApi& cuda_api) {
+    return run_with_kernel(options, kernel, output, cuda_api, nullptr);
+}
+
+int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel,
+                    std::ostream& output, const CudaApi& cuda_api,
+                    LargeReferenceFn large_reference) {
     // This direct test/injection boundary may bypass run(), so validate again here.
     validate_options(options);
-    require_reference_available(options.problem);
+    require_reference_available(options.problem, large_reference);
+    const bool use_cpu_reference = uses_cpu_reference(options.problem);
 
     const std::size_t a_count = matrix_count(options.problem.m, options.problem.k,
                                              "A elements");
@@ -422,8 +443,10 @@ int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel
     std::vector<float> expected(c_count, 0.0F);
     std::vector<float> actual(c_count, 0.0F);
 
-    reference_cpu(host_a.data(), host_b.data(), expected.data(), options.problem.m,
-                  options.problem.n, options.problem.k);
+    if (use_cpu_reference) {
+        reference_cpu(host_a.data(), host_b.data(), expected.data(), options.problem.m,
+                      options.problem.n, options.problem.k);
+    }
 
     DeviceBuffer device_a(cuda_api, matrix_bytes(a_count, "A bytes"));
     DeviceBuffer device_b(cuda_api, matrix_bytes(b_count, "B bytes"));
@@ -434,19 +457,35 @@ int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel
     CUDA_CHECK(cuda_api.memcpy_h2d_fn(device_b.as_float(), host_b.data(),
                                       matrix_bytes(b_count, "B bytes")));
 
+    if (!use_cpu_reference) {
+        large_reference(device_a.as_float(), device_b.as_float(), device_c.as_float(),
+                        options.problem, nullptr);
+        CUDA_CHECK(cuda_api.peek_at_last_error_fn());
+        CUDA_CHECK(cuda_api.device_synchronize_fn());
+        CUDA_CHECK(cuda_api.memcpy_d2h_fn(
+            expected.data(), device_c.as_float(),
+            matrix_bytes(expected.size(), "reference C copy bytes")));
+    }
+
+    const std::string_view reference_source =
+        use_cpu_reference ? "cpu" : "cublas-pedantic-fp32";
+    const ValidationTolerances tolerances = validation_tolerances(use_cpu_reference);
+
     ValidationSummary validation =
         run_validation_phase(options, kernel, cuda_api, device_a.as_float(),
-                             device_b.as_float(), device_c.as_float(), expected, actual);
+                             device_b.as_float(), device_c.as_float(), expected, actual,
+                             tolerances.atol, tolerances.rtol);
 
     if (options.mode == RunMode::validate) {
         print_result_line(output, kernel, validation.selected_path, options.problem,
-                          validation.passed, validation.metrics, 0.0, 0.0);
+                          validation.passed, validation.metrics, 0.0, 0.0,
+                          reference_source);
         return validation.passed ? 0 : 1;
     }
 
     if (!validation.passed) {
         print_result_line(output, kernel, validation.selected_path, options.problem,
-                          false, validation.metrics, 0.0, 0.0);
+                          false, validation.metrics, 0.0, 0.0, reference_source);
         return 1;
     }
 
@@ -456,7 +495,7 @@ int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel
         device_c.as_float(), selected_path);
     print_result_line(output, kernel, selected_path, options.problem, true,
                       validation.metrics, average_ms,
-                      compute_gflops(options.problem, average_ms));
+                      compute_gflops(options.problem, average_ms), reference_source);
     return 0;
 }
 

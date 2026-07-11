@@ -32,9 +32,34 @@ target_include_directories(gemm_common
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+target_link_libraries(gemm_common
+    PUBLIC
+        CUDA::cudart
+)
+
 target_compile_options(gemm_common
     PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-Wpedantic>
+)
+
+add_library(gemm_vendor_baseline STATIC
+    common/reference_cublas.cu
+)
+
+target_include_directories(gemm_vendor_baseline
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(gemm_vendor_baseline
+    PUBLIC
+        CUDA::cublas
+        CUDA::cudart
+)
+
+target_compile_options(gemm_vendor_baseline
+    PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3;-lineinfo;-Xcompiler=-Wall,-Wextra>
 )
 
 add_executable(gemm_common_tests
@@ -66,6 +91,7 @@ target_include_directories(gemm_runner_support
 target_link_libraries(gemm_runner_support
     PUBLIC
         gemm_common
+        gemm_vendor_baseline
         CUDA::cudart
         CUDA::cublas
 )
@@ -155,4 +181,31 @@ add_test(
 
 set_tests_properties(gemm_register_rectangular_tail_validate PROPERTIES
     PASS_REGULAR_EXPRESSION "kernel=register path=register shape=65x127x33 status=PASS"
+)
+
+add_test(
+    NAME gemm_cublas_rectangular_validate
+    COMMAND gemm_runner --kernel cublas-fp32 --m 17 --n 19 --k 23 --mode validate
+)
+
+set_tests_properties(gemm_cublas_rectangular_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=cublas-fp32 path=cublas-pedantic-fp32 shape=17x19x23 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_cublas_narrow_rectangular_validate
+    COMMAND gemm_runner --kernel cublas-fp32 --m 31 --n 7 --k 13 --mode validate
+)
+
+set_tests_properties(gemm_cublas_narrow_rectangular_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=cublas-fp32 path=cublas-pedantic-fp32 shape=31x7x13 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_register_large_reference_validate
+    COMMAND gemm_runner --kernel register --m 512 --n 512 --k 512 --mode validate
+)
+
+set_tests_properties(gemm_register_large_reference_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=register path=register shape=512x512x512 status=PASS.*reference=cublas-pedantic-fp32"
 )

@@ -15,7 +15,7 @@
 3. [2D register tiling](docs/register-tiled.md)
 4. `float4` 向量化加载
 5. `cp.async` 双缓冲
-6. cuBLAS pedantic FP32 基线
+6. [cuBLAS pedantic FP32 基线](docs/cublas-baseline.md)
 
 所有版本共用同一套输入、CPU 对拍和计时框架。性能数据会在完整正确性测试和 sanitizer 通过后重新采集，不沿用学习仓库里的旧结果。
 

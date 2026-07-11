@@ -39,6 +39,15 @@ int run(const RunnerOptions& options, std::ostream& output);
 
 namespace runner_internal {
 
+bool uses_cpu_reference(Problem problem);
+struct ValidationTolerances {
+    double atol;
+    double rtol;
+};
+ValidationTolerances validation_tolerances(bool cpu_reference);
+using LargeReferenceFn = void (*)(const float*, const float*, float*, Problem,
+                                  cudaStream_t);
+
 struct CudaApi {
     cudaError_t (*malloc_fn)(void**, std::size_t);
     cudaError_t (*free_fn)(void*);
@@ -57,6 +66,9 @@ int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel
                     std::ostream& output);
 int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel,
                     std::ostream& output, const CudaApi& cuda_api);
+int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel,
+                    std::ostream& output, const CudaApi& cuda_api,
+                    LargeReferenceFn large_reference);
 
 }  // namespace runner_internal
 
