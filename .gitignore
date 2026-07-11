@@ -30,7 +30,7 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Ad-hoc raw result data
+# Ignore ad-hoc raw runs; the reviewed canonical CSV is force-added explicitly.
 /projects/gemm/results/raw/*.csv
 
 # Generated GEMM reports

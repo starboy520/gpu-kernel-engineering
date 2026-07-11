@@ -2,10 +2,10 @@
 
 这份文档记录每写完一个 GEMM kernel 后的验收顺序。目标不是一次跑完一堆命令，而是逐层缩小问题范围：前一步通过，再进入下一步。
 
-以下命令默认在仓库根目录执行：
+以下命令默认在仓库根目录执行。需要从任意子目录返回根目录时，可以运行：
 
 ```bash
-cd /home/qichengjie/workspace/gpu-kernel-engineering/.worktrees/gemm-rebuild
+cd "$(git rev-parse --show-toplevel)"
 ```
 
 把命令里的 `<kernel>` 替换为实际名称，例如：

@@ -17,6 +17,8 @@
 
 数据来自 A100 80GB PCIe，测试代码 commit `505f789`；cuBLAS 使用 pedantic FP32。每个 kernel 先 warmup 10 次、再计时 50 次，独立重复 3 轮后取 latency 中位数。
 
+CSV 中 `1024³` 的手写版本会看到 `max_rel=1.761818`，但对应 `max_abs=0.000019`。最差相对误差出现在 reference 接近 0 的元素上，分母很小会放大比例；固定验收阈值仍要求全局 `max_abs≤1e-3` 或全局 `max_rel≤2e-3`，该组数据通过的是更有意义的绝对误差条件。
+
 [完整 512³ / 1024³ / 2048³ 结果表](results/generated/a100-fp32.md) · [canonical raw CSV](results/raw/a100-fp32.csv) · [结果字段说明](results/README.md)
 
 ## 优化阶梯
