@@ -18,3 +18,7 @@
 6. cuBLAS pedantic FP32 基线
 
 所有版本共用同一套输入、CPU 对拍和计时框架。性能数据会在完整正确性测试和 sanitizer 通过后重新采集，不沿用学习仓库里的旧结果。
+
+## 验收流程
+
+每完成一个 kernel，都按照 [CUDA GEMM Kernel 验收手册](docs/kernel-verification-guide.md) 逐步执行编译、对拍、sanitizer、回归测试和 benchmark。
