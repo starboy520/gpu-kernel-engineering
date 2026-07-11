@@ -13,7 +13,7 @@
 1. [Naive](docs/naive.md)
 2. [Shared memory tiling](docs/shared-tiled.md)
 3. [2D register tiling](docs/register-tiled.md)
-4. `float4` 向量化加载
+4. [`float4` 向量化加载](docs/vectorized.md)
 5. `cp.async` 双缓冲
 6. [cuBLAS pedantic FP32 基线](docs/cublas-baseline.md)
 

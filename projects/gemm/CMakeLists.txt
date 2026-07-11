@@ -4,6 +4,7 @@ add_library(gemm_kernels STATIC
     kernels/naive.cu
     kernels/shared_tiled.cu
     kernels/register_tiled.cu
+    kernels/vectorized.cu
 )
 
 target_include_directories(gemm_kernels
@@ -181,6 +182,42 @@ add_test(
 
 set_tests_properties(gemm_register_rectangular_tail_validate PROPERTIES
     PASS_REGULAR_EXPRESSION "kernel=register path=register shape=65x127x33 status=PASS"
+)
+
+add_test(
+    NAME gemm_vectorized_fast_aligned_validate
+    COMMAND gemm_runner --kernel vectorized --m 128 --n 128 --k 128 --mode validate
+)
+
+set_tests_properties(gemm_vectorized_fast_aligned_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=vectorized path=fast-float4 shape=128x128x128 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_vectorized_m_tail_fast_validate
+    COMMAND gemm_runner --kernel vectorized --m 130 --n 128 --k 128 --mode validate
+)
+
+set_tests_properties(gemm_vectorized_m_tail_fast_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=vectorized path=fast-float4 shape=130x128x128 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_vectorized_n_nonmultiple_fallback_validate
+    COMMAND gemm_runner --kernel vectorized --m 128 --n 130 --k 128 --mode validate
+)
+
+set_tests_properties(gemm_vectorized_n_nonmultiple_fallback_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=vectorized path=fallback-register shape=128x130x128 status=PASS.*reference=cpu"
+)
+
+add_test(
+    NAME gemm_vectorized_k_nonmultiple_fallback_validate
+    COMMAND gemm_runner --kernel vectorized --m 128 --n 128 --k 130 --mode validate
+)
+
+set_tests_properties(gemm_vectorized_k_nonmultiple_fallback_validate PROPERTIES
+    PASS_REGULAR_EXPRESSION "kernel=vectorized path=fallback-register shape=128x128x130 status=PASS.*reference=cpu"
 )
 
 add_test(
