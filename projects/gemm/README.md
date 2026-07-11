@@ -1,71 +1,83 @@
 # FP32 GEMM 优化阶梯
 
-**状态：** 正在重写
+**状态：已完成首版，可复现。**
 
-## 范围
+在 NVIDIA A100（`sm_80`）上实现 row-major FP32 GEMM：`C = A × B`。项目关注 CUDA Core 上的优化过程，以及 correctness、wall-clock benchmark、ncu 和 SASS 之间能否互相印证。
 
-在 NVIDIA A100（`sm_80`）上实现 row-major 的 FP32 GEMM：$C=A\times B$。
+## 正式结果：2048³
 
-当前只做 CUDA Core 版本，不包含 Tensor Core、转置输入和 batched GEMM。
+| Kernel | Path | Latency (ms) | GFLOPS | % cuBLAS |
+| --- | --- | ---: | ---: | ---: |
+| Naive | `naive` | 4.697866 | 3656.951563 | 20.7% |
+| Shared tiled | `shared` | 3.222119 | 5331.855120 | 30.2% |
+| Register tiled | `register` | 2.644419 | 6496.652581 | 36.8% |
+| Vectorized | `fast-float4` | 1.333719 | 12881.175770 | 73.0% |
+| Async 16B | `fast-pipeline-16b` | 1.398333 | 12285.960382 | 69.6% |
+| cuBLAS FP32 | `cublas-pedantic-fp32` | 0.973251 | 17652.051322 | 100.0% |
 
-## 实现顺序
+数据来自 A100 80GB PCIe，测试代码 commit `505f789`；cuBLAS 使用 pedantic FP32。每个 kernel 先 warmup 10 次、再计时 50 次，独立重复 3 轮后取 latency 中位数。
 
-1. [Naive](docs/naive.md)
-2. [Shared memory tiling](docs/shared-tiled.md)
-3. [2D register tiling](docs/register-tiled.md)
-4. [`float4` 向量化加载](docs/vectorized.md)
-5. [`cp.async` 双缓冲](docs/async-pipeline.md)
-6. [cuBLAS pedantic FP32 基线](docs/cublas-baseline.md)
+[完整 512³ / 1024³ / 2048³ 结果表](results/generated/a100-fp32.md) · [canonical raw CSV](results/raw/a100-fp32.csv) · [结果字段说明](results/README.md)
 
-所有版本共用同一套输入、CPU 对拍和计时框架。性能数据会在完整正确性测试和 sanitizer 通过后重新采集，不沿用学习仓库里的旧结果。
+## 优化阶梯
 
-## 验收流程
+下表的阶段结果均指正式 `2048³` 数据；它们不是对所有 shape 都成立的单调结论。
 
-每完成一个 kernel，都按照 [CUDA GEMM Kernel 验收手册](docs/kernel-verification-guide.md) 逐步执行编译、对拍、sanitizer、回归测试和 benchmark。
+| 阶段 | 核心变化 | 阶段结果 |
+| --- | --- | --- |
+| [Naive](docs/naive.md) | 每个 thread 计算一个输出 | 3.66 TFLOPS，基线 |
+| [Shared memory tiling](docs/shared-tiled.md) | A/B tile 数据复用 | 1.46× Naive |
+| [2D register tiling](docs/register-tiled.md) | 每个 thread 计算 `8×4` 输出 | 1.22× Shared |
+| [`float4` Vectorized](docs/vectorized.md) | 128-bit global load | 1.98× Register，12.88 TFLOPS |
+| [`cp.async` 双缓冲](docs/async-pipeline.md) | 16B global-to-shared async copy | 0.95× Vectorized，负收益 |
+| [cuBLAS baseline](docs/cublas-baseline.md) | pedantic FP32 reference | Vectorized 达到 73.0% |
 
-### 自动化命令
+`512³` 和 `1024³` 上的排序并不一致：例如 `512³` 的 Register 版本慢于 Shared，`1024³` 两者基本持平。小规模问题更容易受 launch、tile/grid 数量和并行度影响，因此这里不宣称优化阶梯对每个 shape 都单调加速，完整对照以 [三组 shape 正式表](results/generated/a100-fp32.md) 为准。
 
-以下命令都从仓库根目录执行。脚本会根据自身位置定位仓库，不依赖当前工作目录；未指定 runner 时默认使用 `build/projects/gemm/gemm_runner`。
+Vectorized 的 SASS 中有 14 条静态 `LDG.E.128`；Async 16B 则生成 4 条 `LDGSTS.E.BYPASS.128`。这说明宽加载与异步搬运确实落到了最终指令，但“指令生成”不等于“墙钟更快”。
+
+- [Vectorized SASS 静态证据](results/evidence/vectorized-sass.md)
+- [Async 16B SASS 静态证据](results/evidence/async-16b-sass.md)
+
+## Async 负结果
+
+在同一 `2048³` profile 协议下，Async 16B 相比 Vectorized：long scoreboard 从 `1.88` 降到 `0.05`，但 short scoreboard 从 `0.49` 升到 `1.87`，shared load bank conflict 从 `1.3-way` 升到 `2.2-way`。`cp.async` 隐藏了大部分 global-memory dependency，瓶颈却转移到 shared-memory 访问，最终 Async 为 12.29 TFLOPS，仅为 cuBLAS 的 69.6%，比 Vectorized 慢约 4.7%。
+
+首版没有加入 swizzle。直接 padding 会破坏后续 shared row 的 16B async-copy alignment；正确处理需要成对修改 shared-memory 写入和读取映射。这个实验保留为可解释的负结果，不用局部 profiler 改善替代最终 wall-clock 结论。详见 [Async 阶段分析](docs/async-pipeline.md) 和 [实验方法](docs/methodology.md)。
+
+## Build
+
+需要 CUDA Toolkit、CMake 3.25+，默认目标架构为 `sm_80`。以下命令从仓库根目录执行：
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+```
+
+## 验收与复现
+
+每个 kernel 共用同一套 runner、reference 和计时框架，并按 [CUDA GEMM Kernel 验收手册](docs/kernel-verification-guide.md) 执行。正式数据采集与 profiler 解读规则见 [GEMM 性能实验方法](docs/methodology.md)。
 
 ```bash
 projects/gemm/scripts/validate.sh
 projects/gemm/scripts/sanitize.sh quick
 projects/gemm/scripts/sanitize.sh full
-projects/gemm/scripts/profile.sh vectorized
-projects/gemm/scripts/extract_sass.sh vectorized
-```
-
-`validate.sh` 先运行完整 CTest，再读取 `projects/gemm/tests/correctness_cases.csv`。`kernel=all` 会展开为 `naive`、`shared`、`register`、`vectorized`、`async-16b` 五个作者实现，不包含 cuBLAS；具名行只运行指定实现。每次 runner 调用都使用 `--mode validate --warmup 1 --iterations 1`，并检查退出码、`status=PASS`，以及具名用例要求的精确 `path=` token。当前 CSV 共执行 59 次 runner 对拍。
-
-`sanitize.sh quick` 执行 7 条 memcheck：五个作者实现各一个代表 shape，并额外覆盖 vectorized 与 async-16b 的 N 非整倍数 fallback。`sanitize.sh full` 包含 quick 的全部命令，再对 shared、register、vectorized、async-16b 执行 racecheck、synccheck、initcheck，共 19 条命令。full 覆盖更完整，但运行时间会明显更长。
-
-`benchmark.sh` 是唯一认可的正式 benchmark 入口，负责按固定协议批量执行 `naive`、`shared`、`register`、`vectorized`、`async-16b`、`cublas-fp32`，对每个 shape 重复多次后只保留中位数延迟，并自动渲染 Markdown 汇总。默认协议如下：
-
-- shape：`512x512x512`、`1024x1024x1024`、`2048x2048x2048`
-- warmup：`10`
-- iterations：`50`
-- repeats：`3`
-- seed：固定为 `1234`
-
-官方 benchmark 从仓库根目录执行：
-
-```bash
 projects/gemm/scripts/benchmark.sh
+
+projects/gemm/scripts/profile.sh vectorized 2048 2048 2048
+projects/gemm/scripts/profile.sh async-16b 2048 2048 2048
+projects/gemm/scripts/extract_sass.sh vectorized
+projects/gemm/scripts/extract_sass.sh async-16b
 ```
 
-脚本默认拒绝在 dirty working tree 上执行任何 benchmark；如确实需要覆盖，显式设置 `GEMM_ALLOW_DIRTY=1`：
+<details>
+<summary>自动化命令与输出约定</summary>
 
-```bash
-GEMM_ALLOW_DIRTY=1 projects/gemm/scripts/benchmark.sh
-```
+`validate.sh` 先运行完整 CTest，再按 `tests/correctness_cases.csv` 对拍五个手写实现及具名 fast path / fallback。`sanitize.sh quick` 运行代表性 memcheck；`full` 进一步运行 racecheck、synccheck 和 initcheck。
 
-默认 runner 路径为 `build/projects/gemm/gemm_runner`，也可以传入自定义 runner：
+`benchmark.sh` 是正式 benchmark 的唯一入口。默认 shape 为 `512³`、`1024³`、`2048³`，协议为 warmup 10、iterations 50、repeats 3、seed 1234。脚本要求 clean working tree，并把中位数写入 `results/raw/a100-fp32.csv`，再生成 `results/generated/a100-fp32.md`。
 
-```bash
-projects/gemm/scripts/benchmark.sh /path/to/gemm_runner
-```
-
-烟雾模式通过环境变量覆盖 shape / warmup / iterations / repeats，不改变脚本本身：
+非正式烟雾测试会自动写入 smoke 文件：
 
 ```bash
 GEMM_SHAPES='512x512x512' \
@@ -75,48 +87,12 @@ GEMM_REPEATS=1 \
 projects/gemm/scripts/benchmark.sh
 ```
 
-非正式协议默认写入 `projects/gemm/results/raw/smoke.csv` 和 `projects/gemm/results/generated/smoke.md`，不会覆盖 canonical 正式结果。需要自定义路径时可设置 `GEMM_OUTPUT_CSV` 和 `GEMM_OUTPUT_MD`。
+各脚本默认使用 `build/projects/gemm/gemm_runner`。validate、sanitize、benchmark 可接收自定义 runner 位置参数；profile 通过 `GEMM_RUNNER` 覆盖。profile 的 `.ncu-rep` / `.txt` 与完整 `.sass` 是机器相关诊断产物，紧凑证据保存在 `results/evidence/`。
 
-正式结果会写入 `projects/gemm/results/raw/a100-fp32.csv`，随后自动生成 `projects/gemm/results/generated/a100-fp32.md`。对外引用性能数字时，以这条脚本产物为准，不手工拼接或摘抄临时日志。
+</details>
 
-### Profiler 与 SASS 复现
+## Fast Path 与范围
 
-`profile.sh` 默认使用 `2048×2048×2048`、validate 模式、`warmup=0`，并通过 demangled kernel regex 只采集一次目标 kernel launch。完整报告和可读文本分别写入 `projects/gemm/results/profiles/<kernel>-<shape>.ncu-rep` 与同名 `.txt`：
+Vectorized 与 Async 16B fast path 要求 A/B 基地址 16B 对齐，并满足 `K % 4 == 0`、`N % 4 == 0`；M 可以有尾块。不满足条件时，launcher 整体 fallback 到 Register Tiling，而不是在同一个 kernel 内混合 scalar/vector path。
 
-```bash
-projects/gemm/scripts/profile.sh shared
-projects/gemm/scripts/profile.sh register 2048 2048 2048
-projects/gemm/scripts/profile.sh vectorized 2048 2048 2048
-projects/gemm/scripts/profile.sh async-16b 2048 2048 2048
-```
-
-需要覆盖默认 runner 时设置 `GEMM_RUNNER`：
-
-```bash
-GEMM_RUNNER=/path/to/gemm_runner \
-	projects/gemm/scripts/profile.sh async-16b 2048 2048 2048
-```
-
-`extract_sass.sh` 从完整 `cuobjdump --dump-sass` 输出中切出目标函数，保存完整函数 SASS，并生成可提交的小型 opcode 计数与宽加载/异步指令片段：
-
-```bash
-projects/gemm/scripts/extract_sass.sh vectorized
-projects/gemm/scripts/extract_sass.sh async-16b
-projects/gemm/scripts/extract_sass.sh vectorized /path/to/gemm_runner
-```
-
-完整 report、文本和 `.sass` 都是 gitignored 诊断产物；紧凑证据位于 `projects/gemm/results/evidence/`。采集协议、指标解释和 Async 负结果见 [GEMM 性能实验方法](docs/methodology.md)。
-
-两个脚本都接受自定义 runner 路径：
-
-```bash
-projects/gemm/scripts/validate.sh /path/to/gemm_runner
-projects/gemm/scripts/sanitize.sh quick /path/to/gemm_runner
-```
-
-为了在无 GPU 环境中测试 CSV 解析，可用 `GEMM_CASES_FILE` 临时覆盖用例文件；该文件仍必须使用表头 `kernel,m,n,k,expected_path`，且脚本仍会先执行 CTest。正常验收不要设置此变量。
-
-```bash
-GEMM_CASES_FILE=/tmp/correctness_cases.csv \
-	projects/gemm/scripts/validate.sh /tmp/fake-gemm-runner
-```
+首版不包含 Tensor Core、转置输入和 batched GEMM，也没有实现 shared-memory swizzle。当前结果只针对仓库记录的 A100 `sm_80` 环境与三组方阵 shape；跨 GPU、工具链或协议的数据不直接比较。
