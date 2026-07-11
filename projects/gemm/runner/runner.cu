@@ -6,11 +6,14 @@
 #include "gemm/validation.hpp"
 
 #include <charconv>
+#include <cstdlib>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
 #include <ostream>
 #include <random>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -22,6 +25,16 @@ constexpr double kValidationAtol = 1.0e-3;
 constexpr double kValidationRtol = 1.0e-3;
 constexpr double kLargeReferenceAtol = 1.0e-3;
 constexpr double kLargeReferenceRtol = 2.0e-3;
+constexpr char kCsvHeader[] =
+    "timestamp,git_commit,gpu,cuda,nvcc,kernel,path,m,n,k,warmup,iterations,latency_ms,gflops,passed,max_abs,max_rel,reference";
+
+struct CsvMetadata {
+    std::string timestamp;
+    std::string git_commit;
+    std::string gpu;
+    std::string cuda;
+    std::string nvcc;
+};
 
 cudaError_t default_malloc(void** pointer, std::size_t bytes) {
     return cudaMalloc(pointer, bytes);
@@ -171,6 +184,113 @@ std::string selected_path_or_kernel_name(const LaunchResult& result,
         return kernel.name;
     }
     return result.selected_path;
+}
+
+std::string format_double(double value) {
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(6) << value;
+    return stream.str();
+}
+
+std::string csv_escape(std::string_view field) {
+    if (field.find_first_of(",\"\n\r") == std::string_view::npos) {
+        return std::string(field);
+    }
+
+    std::string escaped;
+    escaped.reserve(field.size() + 2U);
+    escaped.push_back('"');
+    for (char character : field) {
+        if (character == '"') {
+            escaped.push_back('"');
+        }
+        escaped.push_back(character);
+    }
+    escaped.push_back('"');
+    return escaped;
+}
+
+std::string read_env_value(const char* primary_name, const char* fallback_name = nullptr) {
+    if (const char* value = std::getenv(primary_name); value != nullptr) {
+        return value;
+    }
+    if (fallback_name != nullptr) {
+        if (const char* value = std::getenv(fallback_name); value != nullptr) {
+            return value;
+        }
+    }
+    return "";
+}
+
+CsvMetadata load_csv_metadata() {
+    return CsvMetadata{
+        read_env_value("GEMM_BENCH_TIMESTAMP"),
+        read_env_value("GEMM_GIT_COMMIT", "GIT_COMMIT"),
+        read_env_value("GEMM_GPU", "GPU"),
+        read_env_value("GEMM_CUDA", "CUDA"),
+        read_env_value("GEMM_NVCC", "NVCC"),
+    };
+}
+
+bool csv_file_needs_header(const std::string& csv_path) {
+    std::ifstream input(csv_path);
+    if (!input.is_open()) {
+        return true;
+    }
+
+    std::string header;
+    if (!std::getline(input, header)) {
+        return true;
+    }
+
+    if (header == kCsvHeader) {
+        return false;
+    }
+
+    throw std::runtime_error("existing CSV header mismatch: " + csv_path);
+}
+
+void append_csv_row(const RunnerOptions& options, const KernelDescriptor& kernel,
+                    std::string_view selected_path, bool passed,
+                    const ErrorMetrics& metrics, double latency_ms,
+                    double gflops, std::string_view reference_source) {
+    if (options.csv_path.empty()) {
+        return;
+    }
+
+    const CsvMetadata metadata = load_csv_metadata();
+    const bool needs_header = csv_file_needs_header(options.csv_path);
+    std::ofstream output(options.csv_path, std::ios::app);
+    if (!output.is_open()) {
+        throw std::runtime_error("failed to open CSV output: " + options.csv_path);
+    }
+
+    if (needs_header) {
+        output << kCsvHeader << '\n';
+    }
+
+    output << csv_escape(metadata.timestamp) << ','
+           << csv_escape(metadata.git_commit) << ','
+           << csv_escape(metadata.gpu) << ','
+           << csv_escape(metadata.cuda) << ','
+           << csv_escape(metadata.nvcc) << ','
+           << csv_escape(kernel.name) << ','
+           << csv_escape(selected_path) << ','
+           << options.problem.m << ','
+           << options.problem.n << ','
+           << options.problem.k << ','
+           << options.warmup << ','
+           << options.iterations << ','
+           << format_double(latency_ms) << ','
+           << format_double(gflops) << ','
+           << (passed ? "true" : "false") << ','
+           << format_double(metrics.max_abs) << ','
+           << format_double(metrics.max_rel) << ','
+           << csv_escape(reference_source) << '\n';
+
+    if (!output) {
+        throw std::runtime_error("failed to write CSV row: " + options.csv_path);
+    }
 }
 
 void print_result_line(std::ostream& output, const KernelDescriptor& kernel,
@@ -335,9 +455,6 @@ void validate_options(const RunnerOptions& options) {
     if (options.iterations <= 0) {
         throw std::invalid_argument("--iterations must be a positive integer");
     }
-    if (!options.csv_path.empty()) {
-        throw std::invalid_argument("CSV output is not implemented yet");
-    }
 }
 
 std::size_t checked_multiply(std::size_t left, std::size_t right,
@@ -375,7 +492,7 @@ int run(const RunnerOptions& options, std::ostream& output) {
             << "  --warmup <count>       Default: 5\n"
             << "  --iterations <count>   Default: 20\n"
             << "  --seed <uint>          Default: 1234\n"
-            << "  --csv <path>           Parsed now; currently returns not implemented\n"
+            << "  --csv <path>           Append machine-readable benchmark rows to CSV\n"
             << "Validate mode reports latency_ms=0 and gflops=0 until timing is enabled.\n";
         return 0;
     }
@@ -480,12 +597,16 @@ int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel
         print_result_line(output, kernel, validation.selected_path, options.problem,
                           validation.passed, validation.metrics, 0.0, 0.0,
                           reference_source);
+        append_csv_row(options, kernel, validation.selected_path, validation.passed,
+                       validation.metrics, 0.0, 0.0, reference_source);
         return validation.passed ? 0 : 1;
     }
 
     if (!validation.passed) {
         print_result_line(output, kernel, validation.selected_path, options.problem,
                           false, validation.metrics, 0.0, 0.0, reference_source);
+        append_csv_row(options, kernel, validation.selected_path, false,
+                       validation.metrics, 0.0, 0.0, reference_source);
         return 1;
     }
 
@@ -493,9 +614,11 @@ int run_with_kernel(const RunnerOptions& options, const KernelDescriptor& kernel
     const double average_ms = run_benchmark_phase(
         options, kernel, cuda_api, device_a.as_float(), device_b.as_float(),
         device_c.as_float(), selected_path);
+    const double gflops = compute_gflops(options.problem, average_ms);
     print_result_line(output, kernel, selected_path, options.problem, true,
-                      validation.metrics, average_ms,
-                      compute_gflops(options.problem, average_ms), reference_source);
+                      validation.metrics, average_ms, gflops, reference_source);
+    append_csv_row(options, kernel, selected_path, true, validation.metrics,
+                   average_ms, gflops, reference_source);
     return 0;
 }
 

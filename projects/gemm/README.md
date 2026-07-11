@@ -37,6 +37,46 @@ projects/gemm/scripts/sanitize.sh full
 
 `sanitize.sh quick` 执行 7 条 memcheck：五个作者实现各一个代表 shape，并额外覆盖 vectorized 与 async-16b 的 N 非整倍数 fallback。`sanitize.sh full` 包含 quick 的全部命令，再对 shared、register、vectorized、async-16b 执行 racecheck、synccheck、initcheck，共 19 条命令。full 覆盖更完整，但运行时间会明显更长。
 
+`benchmark.sh` 是唯一认可的正式 benchmark 入口，负责按固定协议批量执行 `naive`、`shared`、`register`、`vectorized`、`async-16b`、`cublas-fp32`，对每个 shape 重复多次后只保留中位数延迟，并自动渲染 Markdown 汇总。默认协议如下：
+
+- shape：`512x512x512`、`1024x1024x1024`、`2048x2048x2048`
+- warmup：`10`
+- iterations：`50`
+- repeats：`3`
+- seed：固定为 `1234`
+
+官方 benchmark 从仓库根目录执行：
+
+```bash
+projects/gemm/scripts/benchmark.sh
+```
+
+脚本默认拒绝在 dirty working tree 上执行任何 benchmark；如确实需要覆盖，显式设置 `GEMM_ALLOW_DIRTY=1`：
+
+```bash
+GEMM_ALLOW_DIRTY=1 projects/gemm/scripts/benchmark.sh
+```
+
+默认 runner 路径为 `build/projects/gemm/gemm_runner`，也可以传入自定义 runner：
+
+```bash
+projects/gemm/scripts/benchmark.sh /path/to/gemm_runner
+```
+
+烟雾模式通过环境变量覆盖 shape / warmup / iterations / repeats，不改变脚本本身：
+
+```bash
+GEMM_SHAPES='512x512x512' \
+GEMM_WARMUP=2 \
+GEMM_ITERATIONS=3 \
+GEMM_REPEATS=1 \
+projects/gemm/scripts/benchmark.sh
+```
+
+非正式协议默认写入 `projects/gemm/results/raw/smoke.csv` 和 `projects/gemm/results/generated/smoke.md`，不会覆盖 canonical 正式结果。需要自定义路径时可设置 `GEMM_OUTPUT_CSV` 和 `GEMM_OUTPUT_MD`。
+
+正式结果会写入 `projects/gemm/results/raw/a100-fp32.csv`，随后自动生成 `projects/gemm/results/generated/a100-fp32.md`。对外引用性能数字时，以这条脚本产物为准，不手工拼接或摘抄临时日志。
+
 两个脚本都接受自定义 runner 路径：
 
 ```bash

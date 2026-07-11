@@ -1,20 +1,28 @@
 # GEMM 实验结果
 
-临时跑出来的 CSV 放在 `raw/`，默认不提交。只有经过复查、能够对应到具体代码版本和实验环境的数据，才作为正式结果加入仓库；如果文件仍放在 `raw/`，需要使用 `git add -f` 显式提交。
+正式 benchmark 统一由 `projects/gemm/scripts/benchmark.sh` 产出。不要手工维护 `raw/` 里的 CSV，也不要把终端里零散打印的延迟当作正式结果。
 
-正式数据至少包含以下字段：
+当前约定：
 
-| 字段 | 内容 |
-| --- | --- |
-| `hardware` | GPU 型号和相关设备配置 |
-| `toolchain` | CUDA、编译器和构建工具版本 |
-| `git_commit` | 被测试代码的完整 Git commit SHA |
-| `shape` | GEMM 的 M、N、K |
-| `kernel` | kernel 或基线名称 |
-| `selected_path` | 运行时实际选择的实现路径 |
-| `latency` | 延迟及单位 |
-| `gflops` | 根据 shape 和延迟计算的 GFLOPS |
-| `correctness` | 对拍结果和误差阈值 |
-| `timestamp` | 带时区的测试时间 |
+- canonical CSV：`projects/gemm/results/raw/a100-fp32.csv`
+- generated Markdown：`projects/gemm/results/generated/a100-fp32.md`
+- smoke CSV：`projects/gemm/results/raw/smoke.csv`
+- smoke Markdown：`projects/gemm/results/generated/smoke.md`
 
-自动生成的 Markdown 表格放在 `generated/`，默认不提交。
+`benchmark.sh` 会把 runner 的原始重复结果先写到临时文件，按每个 `kernel + shape` 选出中位数延迟后，再生成 canonical CSV；因此 `raw/a100-fp32.csv` 中每行都应该对应一条最终保留的中位数记录，而不是单次试跑。
+
+只要 shape、warmup、iterations 或 repeats 偏离正式协议，且没有显式指定输出路径，脚本就会自动写入 smoke 文件，不会覆盖 canonical CSV。
+
+canonical CSV 的表头固定为：
+
+```text
+timestamp,git_commit,gpu,cuda,nvcc,kernel,path,m,n,k,warmup,iterations,latency_ms,gflops,passed,max_abs,max_rel,reference
+```
+
+其中：
+
+- `path` 是运行时实际选择的实现路径，例如 `fast-float4` 或 `fallback-register`
+- `reference` 是正确性对拍来源，例如 `cpu` 或 `cublas-pedantic-fp32`
+- `passed`、`max_abs`、`max_rel` 来自同一次 benchmark 前置校验，便于后续回溯
+
+自动生成的 Markdown 只做展示和阶段对比，不替代原始 CSV。引用数据、复现问题、追查 fallback 时，先看 canonical CSV。
