@@ -47,6 +47,20 @@ Vectorized 的 SASS 中有 14 条静态 `LDG.E.128`；Async 16B 则生成 4 条 
 
 首版没有加入 swizzle。直接 padding 会破坏后续 shared row 的 16B async-copy alignment；正确处理需要成对修改 shared-memory 写入和读取映射。这个实验保留为可解释的负结果，不用局部 profiler 改善替代最终 wall-clock 结论。详见 [Async 阶段分析](docs/async-pipeline.md) 和 [实验方法](docs/methodology.md)。
 
+## 下一阶段：Tensor Core v2（规划中）
+
+当前 FP32 CUDA Core 首版已经完成。下一阶段计划新增独立的 FP16 Tensor Core 路线，目前处于系统学习与实验准备阶段，尚未提交 Tensor Core kernel，也不声明尚未测得的性能结果。
+
+- [ ] 用 WMMA 完成 FP16 输入、FP32 累加的正确性基线
+- [ ] 手写单 warp `mma.sync.m16n8k16`，验证 lane/fragment 映射
+- [ ] 完成 `ldmatrix` 与转置加载实验，记录 shared-memory 到寄存器的映射
+- [ ] 从 instruction tile 扩展到 warp tile 和多 warp block tile
+- [ ] 加入 `cp.async` 多 stage pipeline，并验证同步与 stage 复用
+- [ ] 建立 FP16 cuBLAS Tensor Core baseline、独立容差和独立结果表
+- [ ] 使用 wall-clock、ncu 和 `HMMA`/`LDSM` SASS 形成完整证据链
+
+Tensor Core 路线不会与当前 pedantic FP32 数据混表，因为 FP16/TF32 改变了乘法输入精度。详细的概念、分阶段练习、正确性设计和验收标准见 [A100 Tensor Core GEMM 学习与实现路线](docs/tensor-core-learning.md)。
+
 ## Build
 
 需要 CUDA Toolkit、CMake 3.25+，默认目标架构为 `sm_80`。以下命令从仓库根目录执行：
@@ -97,4 +111,4 @@ projects/gemm/scripts/benchmark.sh
 
 Vectorized 与 Async 16B fast path 要求 A/B 基地址 16B 对齐，并满足 `K % 4 == 0`、`N % 4 == 0`；M 可以有尾块。不满足条件时，launcher 整体 fallback 到 Register Tiling，而不是在同一个 kernel 内混合 scalar/vector path。
 
-首版不包含 Tensor Core、转置输入和 batched GEMM，也没有实现 shared-memory swizzle。当前结果只针对仓库记录的 A100 `sm_80` 环境与三组方阵 shape；跨 GPU、工具链或协议的数据不直接比较。
+截至当前，首版不包含 Tensor Core、转置输入和 batched GEMM，也没有实现 shared-memory swizzle；Tensor Core v2 仍是上述公开路线图中的待办项。当前结果只针对仓库记录的 A100 `sm_80` 环境与三组方阵 shape；跨 GPU、工具链或协议的数据不直接比较。
