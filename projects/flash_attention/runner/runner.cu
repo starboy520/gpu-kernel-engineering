@@ -4,6 +4,7 @@
 #include "flash_attention/reference.hpp"
 #include "flash_attention/validation.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstddef>
@@ -88,6 +89,38 @@ std::vector<float> generate_input_impl(std::size_t count, std::uint32_t seed) {
     return values;
 }
 
+const char *input_pattern_name(InputPattern input_pattern) {
+    switch (input_pattern) {
+    case InputPattern::random:
+        return "random";
+    case InputPattern::zero_qk:
+        return "zero-qk";
+    case InputPattern::negative_scores:
+        return "negative-scores";
+    }
+    throw std::invalid_argument("unknown input pattern");
+}
+
+void apply_input_pattern_impl(InputPattern input_pattern, Problem problem,
+                              std::vector<float> &q, std::vector<float> &k) {
+    if (input_pattern == InputPattern::random) {
+        return;
+    }
+    if (input_pattern == InputPattern::zero_qk) {
+        std::fill(q.begin(), q.end(), 0.0F);
+        std::fill(k.begin(), k.end(), 0.0F);
+        return;
+    }
+
+    std::fill(q.begin(), q.end(), 1.0F);
+    for (int key = 0; key < problem.n; ++key) {
+        const float key_value = -0.25F - 0.01F * static_cast<float>(key % 17);
+        for (int feature = 0; feature < problem.d; ++feature) {
+            k[static_cast<std::size_t>(key) * problem.d + feature] = key_value;
+        }
+    }
+}
+
 std::string require_value(int argc, const char *const argv[], int &index,
                           const std::string &option) {
     if (index + 1 >= argc) {
@@ -123,7 +156,7 @@ const char *path_or_name(const LaunchResult &result,
 void print_result(std::ostream &output, const KernelDescriptor &kernel,
                   const char *path, Problem problem, bool passed,
                   const ErrorMetrics &metrics, double latency_ms,
-                  std::size_t workspace_bytes) {
+                  std::size_t workspace_bytes, InputPattern input_pattern) {
     const std::size_t worst_query =
         metrics.worst_index / static_cast<std::size_t>(problem.d);
     const std::size_t worst_feature =
@@ -131,6 +164,7 @@ void print_result(std::ostream &output, const KernelDescriptor &kernel,
     output << std::fixed << std::setprecision(6) << "kernel=" << kernel.name
            << " path=" << path << " shape=" << problem.n << 'x' << problem.d
            << " causal=" << (problem.causal ? 1 : 0)
+           << " input_pattern=" << input_pattern_name(input_pattern)
            << " status=" << (passed ? "PASS" : "FAIL")
            << " max_abs=" << metrics.max_abs << " max_rel=" << metrics.max_rel
            << " worst=(" << worst_query << ',' << worst_feature
@@ -148,6 +182,18 @@ std::size_t checked_multiply(std::size_t left, std::size_t right,
 
 std::vector<float> generate_input(std::size_t count, std::uint32_t seed) {
     return generate_input_impl(count, seed);
+}
+
+void apply_input_pattern(InputPattern input_pattern, Problem problem,
+                         std::vector<float> &q, std::vector<float> &k) {
+    const std::size_t expected_size = checked_multiply_impl(
+        static_cast<std::size_t>(problem.n),
+        static_cast<std::size_t>(problem.d), "input pattern tensor");
+    if (q.size() != expected_size || k.size() != expected_size) {
+        throw std::invalid_argument(
+            "input pattern requires Q and K to match Problem shape");
+    }
+    apply_input_pattern_impl(input_pattern, problem, q, k);
 }
 
 RunnerOptions parse_arguments(int argc, const char *const argv[]) {
@@ -173,6 +219,20 @@ RunnerOptions parse_arguments(int argc, const char *const argv[]) {
                 throw std::invalid_argument("--causal must be 0 or 1");
             }
             options.problem.causal = causal == 1;
+        } else if (option == "--input-pattern") {
+            const std::string pattern =
+                require_value(argc, argv, index, option);
+            if (pattern == "random") {
+                options.input_pattern = InputPattern::random;
+            } else if (pattern == "zero-qk") {
+                options.input_pattern = InputPattern::zero_qk;
+            } else if (pattern == "negative-scores") {
+                options.input_pattern = InputPattern::negative_scores;
+            } else {
+                throw std::invalid_argument(
+                    "invalid input pattern: " + pattern +
+                    " (expected random, zero-qk, or negative-scores)");
+            }
         } else if (option == "--mode") {
             const std::string mode = require_value(argc, argv, index, option);
             if (mode == "validate") {
@@ -228,6 +288,8 @@ int run(const RunnerOptions &options, std::ostream &output) {
                << "  --n <int>                      Sequence length\n"
                << "  --d <int>                      Single-head dimension\n"
                << "  --causal <0|1>                 Default: 0\n"
+               << "  --input-pattern <name>         "
+                  "random|zero-qk|negative-scores\n"
                << "  --mode <validate|benchmark>    Default: validate\n"
                << "  --warmup <count>               Default: 5\n"
                << "  --iterations <count>           Default: 20\n"
@@ -251,9 +313,10 @@ int run(const RunnerOptions &options, std::ostream &output) {
     const std::size_t workspace_bytes =
         kernel->workspace_bytes(options.problem);
 
-    const std::vector<float> host_q = generate_input(count, options.seed);
-    const std::vector<float> host_k = generate_input(count, options.seed + 1U);
+    std::vector<float> host_q = generate_input(count, options.seed);
+    std::vector<float> host_k = generate_input(count, options.seed + 1U);
     const std::vector<float> host_v = generate_input(count, options.seed + 2U);
+    apply_input_pattern(options.input_pattern, options.problem, host_q, host_k);
     std::vector<float> expected(count);
     std::vector<float> actual(count);
     reference_cpu(host_q.data(), host_k.data(), host_v.data(), expected.data(),
@@ -290,7 +353,7 @@ int run(const RunnerOptions &options, std::ostream &output) {
 
     if (options.mode == RunMode::validate || !passed) {
         print_result(output, *kernel, path, options.problem, passed, metrics,
-                     0.0, workspace_bytes);
+                     0.0, workspace_bytes, options.input_pattern);
         return passed ? 0 : 1;
     }
 
@@ -316,7 +379,7 @@ int run(const RunnerOptions &options, std::ostream &output) {
     const double latency_ms =
         static_cast<double>(total_ms) / options.iterations;
     print_result(output, *kernel, path, options.problem, true, metrics,
-                 latency_ms, workspace_bytes);
+                 latency_ms, workspace_bytes, options.input_pattern);
     return 0;
 }
 

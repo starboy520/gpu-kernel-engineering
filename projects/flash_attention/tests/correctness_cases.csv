@@ -1,0 +1,20 @@
+# Naive Attention correctness cases: n,d,causal,input_pattern
+n,d,causal,input_pattern
+1,1,0,random
+1,1,1,random
+3,2,0,random
+3,2,1,random
+8,8,0,random
+8,8,1,random
+37,24,0,random
+37,24,1,random
+128,64,0,random
+128,64,1,random
+129,64,0,random
+129,64,1,random
+257,128,0,random
+257,128,1,random
+37,24,0,negative-scores
+37,24,1,negative-scores
+37,24,0,zero-qk
+37,24,1,zero-qk

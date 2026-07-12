@@ -11,7 +11,7 @@ if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 80)
 endif()
 
-enable_testing()
+include(CTest)
 
 add_subdirectory(projects/gemm)
 add_subdirectory(projects/flash_attention)

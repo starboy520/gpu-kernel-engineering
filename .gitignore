@@ -30,6 +30,15 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 
+# Local AI agent customizations
+/.github/skills/
+/.github/copilot-instructions.md
+/.claude/skills/
+
+# Editor swap files
+*.swp
+*.swo
+
 # Ignore ad-hoc raw runs; the reviewed canonical CSV is force-added explicitly.
 /projects/gemm/results/raw/*.csv
 
