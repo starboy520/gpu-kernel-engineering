@@ -14,3 +14,4 @@ endif()
 enable_testing()
 
 add_subdirectory(projects/gemm)
+add_subdirectory(projects/flash_attention)

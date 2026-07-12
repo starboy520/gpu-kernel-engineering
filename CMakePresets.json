@@ -1,0 +1,38 @@
+{
+    "version": 6,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 25,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "release-sm80",
+            "displayName": "Release sm_80",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "CMAKE_CUDA_ARCHITECTURES": "80",
+                "CMAKE_CUDA_COMPILER": "/usr/local/cuda/bin/nvcc"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "release-sm80",
+            "displayName": "Build Release sm_80",
+            "configurePreset": "release-sm80"
+        }
+    ],
+    "testPresets": [
+        {
+            "name": "release-sm80",
+            "displayName": "Test Release sm_80",
+            "configurePreset": "release-sm80",
+            "output": {
+                "outputOnFailure": true
+            }
+        }
+    ]
+}
