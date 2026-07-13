@@ -91,7 +91,7 @@ def render(rows: list[dict[str, str]], source: str) -> str:
         (f"环境：{first['gpu']}，SM {first['sm']}，driver {first['driver']}，"
          f"commit `{first['git_commit']}`。"),
         "",
-        "> 正数 `Async Δ` 表示 Async 更快，负数表示回退。ncu 时间不进入本表。",
+        "> `Async Δ = 100 × (T_tiled / T_async - 1)`：正数表示 Async 更快，负数表示回退。它是 speedup delta，不是常规延迟增幅；ncu 时间不进入本表。",
         "",
     ]
 

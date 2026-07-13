@@ -60,7 +60,7 @@ projects/gemm/scripts/extract_sass.sh async-16b
 - CPU double reference、统一 runner、CTest correctness 与 Compute Sanitizer 验证；
 - Tiled 路径不分配完整 `N×N` workspace。
 
-当前版本是单 batch、单 head、FP32 forward educational/research baseline。下一阶段将固化统一 canonical benchmark，并汇总 Naive/Tiled/Parallel/Async 的正常墙钟、ncu 与 SASS 证据。当前 Async 探索数据同时包含改善与回退 shape，因此不宣称稳定加速。
+当前版本是单 batch、单 head、FP32 forward educational/research baseline。48 行 A100 canonical benchmark 已完成：non-causal `D=128` 下 Async 在 `N=512` 延迟增加 18.2%、`N=768` 近似持平、`N=1024` 延迟降低 17.6%；`D=64` 在 `N=512/768` 明显回退，`N=1024` 仍仅近似持平。ncu 与 SASS 证明异步指令和 long-scoreboard 改善，但不宣称跨 shape 稳定加速。
 
 - [项目状态、已完成证据与迭代路线](projects/flash_attention/)
 - [Naive Materialized Kernel](projects/flash_attention/kernels/naive.cu)
@@ -70,9 +70,10 @@ projects/gemm/scripts/extract_sass.sh async-16b
 - [`cp.async` 双缓冲实验](projects/flash_attention/docs/async-pipeline.md)
 - [FlashAttention 性能实验方法](projects/flash_attention/docs/methodology.md)
 - [Nsight Compute 实操手册](projects/flash_attention/docs/ncu-hands-on.md)
+- [A100 canonical benchmark](projects/flash_attention/results/generated/a100-fp32.md)
 - [Tiled correctness 入口](projects/flash_attention/scripts/test_tiled.sh)
 
 ## Roadmap
 
-- FlashAttention：开发中，Naive、Online Tiled、Warp 并行归约与 `cp.async` 双缓冲实验已完成。
+- FlashAttention：Naive、Online Tiled、Warp 并行归约、`cp.async`、canonical benchmark、ncu 与 SASS 证据已完成。
 - CUDA 常用算子：计划中，尚未实现。
