@@ -180,11 +180,52 @@ $$
 
 ## 6. Step 5：第一次采集 ncu report
 
-先只采 `512×128` Tiled：
+先准备输出目录和本实验统一使用的指标集合：
 
 ```bash
-projects/flash_attention/scripts/profile.sh tiled 512 128 0
+runner=build/projects/flash_attention/flash_attention_runner
+profile_dir=projects/flash_attention/results/profiles
+mkdir -p "$profile_dir"
+
+metrics='launch__registers_per_thread,launch__shared_mem_per_block_static,launch__waves_per_multiprocessor,launch__occupancy_limit_shared_mem,launch__occupancy_limit_registers,sm__warps_active.avg.pct_of_peak_sustained_active,smsp__warps_eligible.avg.per_cycle_active,smsp__average_warps_issue_stalled_long_scoreboard_per_issue_active.ratio,smsp__average_warps_issue_stalled_short_scoreboard_per_issue_active.ratio,smsp__average_warps_issue_stalled_barrier_per_issue_active.ratio,smsp__average_warp_latency_per_inst_issued.ratio,sm__throughput.avg.pct_of_peak_sustained_elapsed,dram__throughput.avg.pct_of_peak_sustained_elapsed,lts__throughput.avg.pct_of_peak_sustained_elapsed,l1tex__throughput.avg.pct_of_peak_sustained_elapsed,l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld,l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld'
 ```
+
+现在执行第一条完整 ncu 命令，采集 `512×128` Tiled：
+
+```bash
+ncu \
+    --force-overwrite \
+    --replay-mode kernel \
+    --cache-control all \
+    --clock-control base \
+    --kernel-name-base demangled \
+    --kernel-name 'regex:.*tiled_attention_kernel\(' \
+    --launch-count 1 \
+    --metrics "$metrics" \
+    --export "$profile_dir/tiled-512x128-causal0.ncu-rep" \
+    "$runner" \
+    --kernel tiled \
+    --n 512 --d 128 --causal 0 \
+    --input-pattern random \
+    --mode validate \
+    --warmup 0 --iterations 1 \
+    --seed 1234
+```
+
+参数逐项解释：
+
+| 参数 | 作用 |
+| --- | --- |
+| `--force-overwrite` | 覆盖同名 report，避免交互确认 |
+| `--replay-mode kernel` | 为不同 counters replay 同一次 Kernel launch |
+| `--cache-control all` | 每个 replay pass 统一刷新可控 cache 状态 |
+| `--clock-control base` | profile 时锁定 base clock，提高指标可比性 |
+| `--kernel-name-base demangled` | Kernel filter 使用可读的 C++ 函数名 |
+| `--kernel-name 'regex:...'` | 只匹配同步 Tiled Kernel |
+| `--launch-count 1` | 只收集一个匹配 launch |
+| `--metrics "$metrics"` | 只采本实验统一的资源、stall 和吞吐指标 |
+| `--export` | 保存二进制 `.ncu-rep` |
+| `--mode validate` | Runner 只发起一次目标实现，不混入 warmup/timed launches |
 
 终端会显示：
 
@@ -212,10 +253,9 @@ ls -lh projects/flash_attention/results/profiles/
 
 ```text
 tiled-512x128-causal0.ncu-rep
-tiled-512x128-causal0.txt
 ```
 
-`.ncu-rep` 和本地 profile 文本被 Git 忽略，不会污染公开仓库。
+`.ncu-rep` 被 Git 忽略，不会污染公开仓库。自动化脚本会额外保存 `.txt` 命令日志；本节原始命令只生成 `.ncu-rep`。
 
 ## 7. Step 6：用 CLI 阅读一份 report
 
@@ -231,7 +271,7 @@ report=projects/flash_attention/results/profiles/tiled-512x128-causal0.ncu-rep
 ncu --import "$report" --page details | less
 ```
 
-退出 `less`：按 `q`。当前 `profile.sh` 使用显式 `--metrics`，因此 Details 页面预期只有：
+退出 `less`：按 `q`。Step 5 的原始 ncu 命令使用显式 `--metrics`，因此 Details 页面预期只有：
 
 ```text
 Section: Command line profiler metrics
@@ -260,13 +300,39 @@ CSV 有三行语义：表头、单位、数值。不要忽略单位行。
 
 ## 8. Step 7：采集第一组对照并自动摘要
 
-采 Async：
+使用完全相同的 metrics/cache/clock 设置，只替换 Kernel filter、runner kernel 和输出文件，采集 `512×128` Async：
 
 ```bash
-projects/flash_attention/scripts/profile.sh tiled-async 512 128 0
+ncu \
+    --force-overwrite \
+    --replay-mode kernel \
+    --cache-control all \
+    --clock-control base \
+    --kernel-name-base demangled \
+    --kernel-name 'regex:.*tiled_async_attention_kernel\(' \
+    --launch-count 1 \
+    --metrics "$metrics" \
+    --export "$profile_dir/tiled-async-512x128-causal0.ncu-rep" \
+    "$runner" \
+    --kernel tiled-async \
+    --n 512 --d 128 --causal 0 \
+    --input-pattern random \
+    --mode validate \
+    --warmup 0 --iterations 1 \
+    --seed 1234
 ```
 
-生成对照表：
+先用原生 ncu 查看两份 Details：
+
+```bash
+ncu --import "$profile_dir/tiled-512x128-causal0.ncu-rep" \
+    --page details
+
+ncu --import "$profile_dir/tiled-async-512x128-causal0.ncu-rep" \
+    --page details
+```
+
+为了减少手抄错误，可以再运行项目摘要器；它内部执行的是 `ncu --import REPORT --page raw --csv`，不是新的 profile：
 
 ```bash
 projects/flash_attention/scripts/summarize_ncu.py \
@@ -335,9 +401,56 @@ $$
 ## 9. Step 8：采集 `1024×128` 改善案例
 
 ```bash
-projects/flash_attention/scripts/profile.sh tiled 1024 128 0
-projects/flash_attention/scripts/profile.sh tiled-async 1024 128 0
+ncu \
+    --force-overwrite \
+    --replay-mode kernel \
+    --cache-control all \
+    --clock-control base \
+    --kernel-name-base demangled \
+    --kernel-name 'regex:.*tiled_attention_kernel\(' \
+    --launch-count 1 \
+    --metrics "$metrics" \
+    --export "$profile_dir/tiled-1024x128-causal0.ncu-rep" \
+    "$runner" \
+    --kernel tiled \
+    --n 1024 --d 128 --causal 0 \
+    --input-pattern random \
+    --mode validate \
+    --warmup 0 --iterations 1 \
+    --seed 1234
 
+ncu \
+    --force-overwrite \
+    --replay-mode kernel \
+    --cache-control all \
+    --clock-control base \
+    --kernel-name-base demangled \
+    --kernel-name 'regex:.*tiled_async_attention_kernel\(' \
+    --launch-count 1 \
+    --metrics "$metrics" \
+    --export "$profile_dir/tiled-async-1024x128-causal0.ncu-rep" \
+    "$runner" \
+    --kernel tiled-async \
+    --n 1024 --d 128 --causal 0 \
+    --input-pattern random \
+    --mode validate \
+    --warmup 0 --iterations 1 \
+    --seed 1234
+```
+
+原生读取：
+
+```bash
+ncu --import "$profile_dir/tiled-1024x128-causal0.ncu-rep" \
+    --page details
+
+ncu --import "$profile_dir/tiled-async-1024x128-causal0.ncu-rep" \
+    --page details
+```
+
+可选自动摘要：
+
+```bash
 projects/flash_attention/scripts/summarize_ncu.py \
     projects/flash_attention/results/profiles/tiled-1024x128-causal0.ncu-rep \
     projects/flash_attention/results/profiles/tiled-async-1024x128-causal0.ncu-rep
@@ -390,17 +503,9 @@ ncu-ui projects/flash_attention/results/profiles/tiled-async-1024x128-causal0.nc
 
 ### GUI 阅读顺序
 
-`profile.sh` 生成的精简 report 在 GUI 中主要显示 Command line profiler metrics。下面先列出 detailed/full 都有的 section；Scheduler 与 Warp State 两项仅适用于 full report：
+使用 Step 5/7/8 原始 `ncu --metrics` 命令生成的精简 report，在 GUI 中主要显示 **Command line profiler metrics**。此时先练习搜索、排序和查看指标定义，不要寻找尚未采集的 Launch/Occupancy/Scheduler 标准 section。
 
-1. **Summary / GPU Speed Of Light**：先看整体 SM 和 Memory 吞吐；
-2. **Launch Statistics**：看 grid、block、registers、static SMEM、waves；
-3. **Occupancy**：看理论 occupancy 和 limiting factor；
-4. **Scheduler Statistics（full）**：看 active/eligible/issued warps；
-5. **Warp State Statistics（full）**：看 Long/Short Scoreboard 与 Barrier；
-6. **Memory Workload Analysis**：看 L1TEX/L2/DRAM 与 Shared Memory；
-7. **Source**：需要额外采集 SourceCounters 时再做源码关联。
-
-GUI 中点击指标名称通常可以看到定义说明。先看定义和单位，再抄数值。
+完成下一步的 detailed/full report 采集后，再按该节末尾的“标准 section GUI 阅读顺序”操作。
 
 ## 11. Step 10：学习 section sets
 
@@ -419,7 +524,7 @@ ncu --list-sections
 | `detailed` | 增加 Compute、Memory、SourceCounters 与 Roofline 等 | 深入一次代表 shape |
 | `full` | 在 detailed 基础上加入 SchedulerStats、WarpStateStats 等 | 只在学习完整 GUI section 时使用 |
 
-Profile 脚本使用精简的自定义 metrics 列表，便于公平比较四份报告。学习 Launch、Occupancy、Compute、Memory 和 SourceCounters 时，可以额外采一份 detailed report：
+前面的原始命令使用精简的自定义 metrics 列表，便于公平比较四份报告。学习 Launch、Occupancy、Compute、Memory 和 SourceCounters 时，可以额外采一份 detailed report：
 
 ```bash
 runner=build/projects/flash_attention/flash_attention_runner
@@ -446,7 +551,22 @@ ncu --force-overwrite \
 - 不要把这份 report 的 Duration 与正常 benchmark 对比；
 - Tiled 与 Async 若要横向比较，必须使用完全相同的 set/metrics、cache 和 clock 设置。
 
-若要在 GUI 中直接查看 **Scheduler Statistics** 与 **Warp State Statistics** 标准 section，需要改用 `--set full`。Full set 在当前 ncu 2026.2 预计采集约 7,381 个 metrics，成本很高；本教程的公平对照优先使用 `profile.sh` 的精简指标，只有学习 GUI 页面时才额外采一份 full report。
+若要在 GUI 中直接查看 **Scheduler Statistics** 与 **Warp State Statistics** 标准 section，需要改用 `--set full`。Full set 在当前 ncu 2026.2 预计采集约 7,381 个 metrics，成本很高；本教程的公平对照优先使用前面的精简指标，只有学习 GUI 页面时才额外采一份 full report。
+
+### 标准 section GUI 阅读顺序
+
+采集 detailed/full report 后再打开对应 report：
+
+1. **Summary / GPU Speed Of Light**：先看整体 SM 和 Memory 吞吐；
+2. **Launch Statistics**：看 grid、block、registers、static SMEM、waves；
+3. **Occupancy**：看理论 occupancy 和 limiting factor；
+4. **Compute Workload Analysis**：看计算管线利用；
+5. **Memory Workload Analysis**：看 L1TEX/L2/DRAM 与 Shared Memory；
+6. **Source**：查看源码、SASS 和 counter 关联；
+7. **Scheduler Statistics（full）**：看 active/eligible/issued warps；
+8. **Warp State Statistics（full）**：看 Long/Short Scoreboard 与 Barrier。
+
+GUI 中点击指标名称可以查看定义说明。先确认定义和单位，再抄数值。
 
 ## 12. Step 11：查看 Shared Memory bank conflict
 
@@ -471,17 +591,95 @@ $$
 
 ## 13. Step 12：用 SASS 验证机器指令
 
-```bash
-projects/flash_attention/scripts/extract_sass.sh tiled
-projects/flash_attention/scripts/extract_sass.sh tiled-async
-```
-
-阅读小型证据：
+先查看每个 Kernel 的静态资源：
 
 ```bash
-cat projects/flash_attention/results/evidence/tiled-sass.md
-cat projects/flash_attention/results/evidence/tiled-async-sass.md
+cuobjdump --dump-resource-usage "$runner" 2>/dev/null | \
+    grep -A2 -E 'tiled_attention_kernel|tiled_async_attention_kernel'
 ```
+
+预期看到：
+
+```text
+Tiled：REG:31 SHARED:17484 LOCAL:0
+Async：REG:39 SHARED:33912 LOCAL:0
+```
+
+注意这里是编译期 static Shared Memory；ncu occupancy 使用的 allocated per-block 还包含 driver reserve。
+
+### 13.1 导出完整 SASS
+
+```bash
+mkdir -p /tmp/fa-sass
+cuobjdump --dump-sass "$runner" > /tmp/fa-sass/all.sass
+```
+
+确认目标函数都存在：
+
+```bash
+grep 'Function :' /tmp/fa-sass/all.sass | \
+    grep -E 'tiled_attention_kernel|tiled_async_attention_kernel'
+```
+
+### 13.2 截取 Tiled 函数
+
+```bash
+awk '
+    /^[[:space:]]*Function[[:space:]]*:/ {
+        if (found) exit
+        if (index($0, "tiled_attention_kernel")) found=1
+    }
+    found { print }
+' /tmp/fa-sass/all.sass > /tmp/fa-sass/tiled.sass
+```
+
+### 13.3 截取 Async 函数
+
+```bash
+awk '
+    /^[[:space:]]*Function[[:space:]]*:/ {
+        if (found) exit
+        if (index($0, "tiled_async_attention_kernel")) found=1
+    }
+    found { print }
+' /tmp/fa-sass/all.sass > /tmp/fa-sass/tiled-async.sass
+```
+
+`awk` 的逻辑：遇到包含目标名的 `Function :` 后开始打印，遇到下一个函数头时停止。
+
+### 13.4 查找异步指令
+
+```bash
+grep -E 'LDGSTS|LDGSTSBAR' /tmp/fa-sass/tiled-async.sass
+```
+
+再确认同步版没有相同指令：
+
+```bash
+grep -E 'LDGSTS|LDGSTSBAR' /tmp/fa-sass/tiled.sass || \
+    echo 'Tiled 中没有 LDGSTS/LDGSTSBAR'
+```
+
+### 13.5 统计静态 opcode
+
+```bash
+grep -E -c '[[:space:]]LDGSTS(\.[A-Z0-9]+)*[[:space:]]' \
+    /tmp/fa-sass/tiled-async.sass
+
+grep -E -c '[[:space:]]LDGSTS\.E\.BYPASS\.128[[:space:]]' \
+    /tmp/fa-sass/tiled-async.sass
+
+grep -E -c '[[:space:]]ARRIVES\.LDGSTSBAR(\.[A-Z0-9]+)*[[:space:]]' \
+    /tmp/fa-sass/tiled-async.sass
+
+grep -E -c '[[:space:]]LDL(\.[A-Z0-9]+)*[[:space:]]' \
+    /tmp/fa-sass/tiled-async.sass || true
+
+grep -E -c '[[:space:]]STL(\.[A-Z0-9]+)*[[:space:]]' \
+    /tmp/fa-sass/tiled-async.sass || true
+```
+
+当前 Async 预期静态计数：`LDGSTS*=4`、`LDGSTS.E.BYPASS.128=4`、`ARRIVES.LDGSTSBAR*=2`、`LDL=0`、`STL=0`。
 
 Async 预期包含：
 
@@ -502,6 +700,8 @@ ARRIVES.LDGSTSBAR.64
 - SASS 有 `LDGSTS` 证明 lowering；
 - 静态 opcode 数不等于运行时执行次数；
 - 有 `LDGSTS` 仍不能推出动态 overlap 或性能提高。
+
+项目中的 `extract_sass.sh` 只是将以上命令自动化，并把小型证据写入 `results/evidence/`；学习阶段应先亲自执行本节原始 `cuobjdump`/`awk`/`grep` 命令。
 
 ## 14. 你的实验记录表
 
@@ -538,11 +738,11 @@ ARRIVES.LDGSTSBAR.64
 
 ### ncu 没有命中 Kernel
 
-检查输出是否出现 `Profiling "...目标函数..."`。本项目推荐使用脚本中已经验证过的 demangled regex filter。
+检查输出是否出现 `Profiling "...目标函数..."`。重新核对 Step 5/7/8 原始命令中的 `--kernel-name-base demangled` 和目标 regex。
 
 ### report 已存在
 
-脚本包含 `--force-overwrite`，同 shape report 会被覆盖。需要保留历史版本时先复制或重命名。
+原始命令包含 `--force-overwrite`，同 shape report 会被覆盖。需要保留历史版本时先复制或重命名。
 
 ### ncu 运行很慢
 
