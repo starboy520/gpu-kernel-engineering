@@ -29,8 +29,8 @@ D：1..128
 | Online Tiled | ✅ | K/V 按 `BC=16` 分块，维护 `m/l/O_acc`，不物化 `N×N` | [13 组 correctness](scripts/test_tiled.sh)、零 workspace、[完整 sanitizer](scripts/sanitize.sh) |
 | 并行归约 | ✅ | warp shuffle 并行 max/exp/sum | [正确性、安全性与负性能结果](docs/parallel-reduction.md) |
 | `cp.async` 双缓冲 | ✅ | 双 stage 16B K/V 异步预取 | [Correctness、安全性、SASS 与混合性能结果](docs/async-pipeline.md) |
-| 统一 benchmark | ⬜ | Naive/Tiled/Pipelined 公平墙钟比较 | 计划中 |
-| ncu 与 SASS | ⬜ | 分析 scoreboard、吞吐、资源与机器指令 | 计划中 |
+| 统一 benchmark | 🔄 | 48 行 canonical 矩阵、重复中位数与收益边界 | [实验方法](docs/methodology.md)、[采集脚本](scripts/benchmark.sh) |
+| ncu 与 SASS | ✅ | 分析 scoreboard、吞吐、资源与机器指令 | [ncu 实操手册](docs/ncu-hands-on.md)、[profile](scripts/profile.sh)、[SASS](scripts/extract_sass.sh) |
 | 作品化收口 | ⬜ | 方法文档、正式结果、复现脚本、限制说明 | 计划中 |
 
 这里的状态以仓库中可以重新运行的代码和测试为准，不以计划或历史实验数据代替当前证据。
@@ -167,16 +167,30 @@ projects/flash_attention/scripts/test_tiled_async.sh
 projects/flash_attention/scripts/sanitize.sh full
 ```
 
+性能证据分层执行：
+
+```bash
+projects/flash_attention/scripts/benchmark.sh
+projects/flash_attention/scripts/profile.sh tiled 512 128 0
+projects/flash_attention/scripts/profile.sh tiled-async 512 128 0
+projects/flash_attention/scripts/extract_sass.sh tiled
+projects/flash_attention/scripts/extract_sass.sh tiled-async
+```
+
+- [统一性能实验方法](docs/methodology.md)
+- [Nsight Compute 实操手册](docs/ncu-hands-on.md)
+- [结果目录与证据分层](results/README.md)
+
 也可以通过 VS Code CMake Tools 选择 `release-sm80` preset，构建 `flash_attention_runner`，并在 Test Explorer 中运行 `flash_attention_tiled_validate`。
 
 ## 下一步
 
 并行归约与 `cp.async` 双缓冲实验已经结束。下一阶段：
 
-1. 固化统一 benchmark 协议与结果输出；
-2. 扩充 canonical shape 矩阵，确认 Async 收益边界；
-3. 汇总 Naive/Tiled/Parallel/Async 的正常墙钟；
-4. 最后完成 ncu、SASS 与作品化说明。
+1. 在干净 commit 上运行 48 行 canonical benchmark；
+2. review 并提交 raw CSV 与自动生成的结果表；
+3. 用 `N=512/1024,D=128` 完成 ncu 实操；
+4. 根据 canonical 边界完成最终作品说明。
 
 `BC=32` 不作为当前主线；仅当后续证据表明 tile 宽度是必要变量时再单独评估。
 

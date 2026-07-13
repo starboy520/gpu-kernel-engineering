@@ -49,3 +49,9 @@ __pycache__/
 # Nsight Compute and SASS reproduction outputs
 /projects/gemm/results/profiles/
 /projects/gemm/results/sass/
+
+# FlashAttention benchmark/profile reproduction outputs
+/projects/flash_attention/results/raw/*.csv
+/projects/flash_attention/results/generated/*.md
+/projects/flash_attention/results/profiles/
+/projects/flash_attention/results/sass/

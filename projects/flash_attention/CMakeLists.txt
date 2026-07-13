@@ -74,6 +74,8 @@ target_link_libraries(flash_attention_runner
 )
 
 if(BUILD_TESTING)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
     add_executable(flash_attention_common_tests
         tests/common_tests.cpp
     )
@@ -106,6 +108,12 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME flash_attention_runner_tests COMMAND flash_attention_runner_tests)
+
+    add_test(
+        NAME flash_attention_render_results_tests
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/render_results_test.py
+    )
 
     function(add_flash_attention_naive_validation_test test_name n d causal input_pattern)
         add_test(

@@ -68,6 +68,8 @@ projects/gemm/scripts/extract_sass.sh async-16b
 - [Warp 并行归约 Kernel](projects/flash_attention/kernels/tiled_parallel.cu)
 - [并行归约负结果分析](projects/flash_attention/docs/parallel-reduction.md)
 - [`cp.async` 双缓冲实验](projects/flash_attention/docs/async-pipeline.md)
+- [FlashAttention 性能实验方法](projects/flash_attention/docs/methodology.md)
+- [Nsight Compute 实操手册](projects/flash_attention/docs/ncu-hands-on.md)
 - [Tiled correctness 入口](projects/flash_attention/scripts/test_tiled.sh)
 
 ## Roadmap
