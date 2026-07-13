@@ -17,12 +17,14 @@ std::size_t naive_workspace_bytes(flash_attention::Problem problem) {
 
 std::size_t no_workspace_bytes(flash_attention::Problem) { return 0; }
 
-const std::array<flash_attention::KernelDescriptor, 3> kernel_table{{
+const std::array<flash_attention::KernelDescriptor, 4> kernel_table{{
     {"naive", flash_attention::launch_naive_materialized, naive_workspace_bytes,
      true},
     {"tiled", flash_attention::launch_tiled_online, no_workspace_bytes, true},
     {"tiled-parallel", flash_attention::launch_tiled_parallel,
      no_workspace_bytes, true},
+    {"tiled-async", flash_attention::launch_tiled_async, no_workspace_bytes,
+     true},
 }};
 
 } // namespace

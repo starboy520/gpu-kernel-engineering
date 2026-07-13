@@ -47,6 +47,9 @@ LaunchResult launch_tiled_parallel(const float *q, const float *k,
                                    const float *v, float *output,
                                    float *workspace, Problem problem,
                                    cudaStream_t stream);
+LaunchResult launch_tiled_async(const float *q, const float *k, const float *v,
+                                float *output, float *workspace,
+                                Problem problem, cudaStream_t stream);
 const KernelDescriptor *find_kernel(std::string_view name);
 std::vector<KernelDescriptor> registered_kernels();
 

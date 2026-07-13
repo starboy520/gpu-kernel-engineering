@@ -125,8 +125,10 @@ done
 
 ## 决策
 
-停止继续优化 `BC=16` 的 Softmax reduction，保留该版本作为负结果。下一阶段不修改 Online Softmax 数学，转而评估：
+停止继续优化 `BC=16` 的 Softmax reduction，保留该版本作为负结果。下一阶段不修改 Online Softmax 数学和 tile 宽度，转而评估：
 
-1. `BC=32` 单变量 tile 实验；
-2. K/V `cp.async` 双缓冲；
+1. K/V `cp.async` 双缓冲；
+2. SASS 中的异步搬运指令；
 3. long scoreboard、Shared Memory conflict、occupancy 与正常墙钟的共同变化。
+
+`BC=32` 暂不进入主线，避免在异步搬运实验中同时改变 tile 宽度。

@@ -47,6 +47,7 @@ run_sanitizer() {
     local causal="$5"
     local input_pattern="$6"
     local intent="$7"
+    local expected_path="${8:-$kernel}"
     local output
     local exit_code
 
@@ -65,7 +66,8 @@ run_sanitizer() {
 
     ((exit_code == 0)) || die "sanitizer 失败: tool=$tool exit=$exit_code"
     has_token "$output" "kernel=$kernel" || die "输出缺少 kernel=$kernel"
-    has_token "$output" "path=$kernel" || die "输出缺少 path=$kernel"
+    has_token "$output" "path=$expected_path" || \
+        die "输出缺少 path=$expected_path"
     has_token "$output" 'status=PASS' || die '输出缺少 status=PASS'
 }
 
@@ -74,6 +76,10 @@ run_sanitizer memcheck naive 37 24 0 negative-scores all-negative-softmax
 run_sanitizer memcheck tiled 37 24 1 random tail-causal-zero-workspace
 run_sanitizer memcheck tiled 37 24 0 negative-scores all-negative-online-softmax
 run_sanitizer memcheck tiled-parallel 33 128 1 negative-scores all-mask-shuffle
+run_sanitizer memcheck tiled-async 37 24 0 random async-tail-noncausal \
+    fast-pipeline-16b
+run_sanitizer memcheck tiled-async 33 128 1 negative-scores async-all-mask \
+    fast-pipeline-16b
 
 if [[ $mode == full ]]; then
     for kernel in naive tiled tiled-parallel; do
@@ -82,6 +88,12 @@ if [[ $mode == full ]]; then
         # initcheck covers uninitialized device-global reads, not shared memory.
         run_sanitizer initcheck "$kernel" 37 24 1 random global-memory-initialization
     done
+    run_sanitizer racecheck tiled-async 37 24 0 random async-stage-ownership \
+        fast-pipeline-16b
+    run_sanitizer synccheck tiled-async 37 24 0 random async-pipeline-sync \
+        fast-pipeline-16b
+    run_sanitizer initcheck tiled-async 37 24 0 random async-global-init \
+        fast-pipeline-16b
 fi
 
 printf '[sanitize] summary mode=%s commands=%d status=PASS\n' \

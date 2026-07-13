@@ -153,9 +153,10 @@ void test_special_input_pattern_semantics() {
 void test_registry_and_workspace() {
     const std::vector<flash_attention::KernelDescriptor> kernels =
         flash_attention::registered_kernels();
-    check(kernels.size() == 3,
-          "registry contains naive, tiled, and tiled-parallel kernels");
-    if (kernels.size() == 3) {
+    check(kernels.size() == 4,
+          "registry contains naive, tiled, tiled-parallel, and tiled-async "
+          "kernels");
+    if (kernels.size() == 4) {
         const flash_attention::KernelDescriptor &naive = kernels[0];
         check(std::string_view(naive.name) == "naive",
               "registered kernel is naive");
@@ -183,6 +184,15 @@ void test_registry_and_workspace() {
         check(parallel.author_kernel, "tiled-parallel is an author kernel");
         check(parallel.workspace_bytes({37, 24, false}) == 0,
               "tiled-parallel does not materialize N*N workspace");
+
+        const flash_attention::KernelDescriptor &async = kernels[3];
+        check(std::string_view(async.name) == "tiled-async",
+              "fourth registered kernel is tiled-async");
+        check(async.launch == flash_attention::launch_tiled_async,
+              "descriptor uses tiled-async launcher");
+        check(async.author_kernel, "tiled-async is an author kernel");
+        check(async.workspace_bytes({37, 24, false}) == 0,
+              "tiled-async does not materialize N*N workspace");
     }
     check(flash_attention::find_kernel("missing") == nullptr,
           "unknown kernel is not found");
