@@ -1,6 +1,6 @@
 # FP32 FlashAttention 数据流重建
 
-**状态：开发中。当前已完成 Naive Materialized Attention 与 Online Tiled Attention correctness baseline。**
+**状态：开发中。当前已完成 Naive Materialized、Online Tiled 与 Warp 并行归约实验。**
 
 本项目从标准 Scaled Dot-Product Attention 出发，在 NVIDIA A100（`sm_80`）上逐步重建不物化完整 `N×N` Scores 的 FlashAttention 数据流。当前定位是 **educational/research FP32 forward implementation**，重点是独立手写、正确性边界和可解释的性能工程过程，不宣称生产级 FlashAttention-2。
 
@@ -27,7 +27,7 @@ D：1..128
 | 工程与 reference | ✅ | CPU double reference、统一 runner、validation | [common/runner tests](tests/) |
 | Naive Materialized | ✅ | `QK^T → Softmax → PV`，显式 `N×N` workspace | [18 组 correctness](tests/correctness_cases.csv)、[完整 sanitizer](scripts/sanitize.sh) |
 | Online Tiled | ✅ | K/V 按 `BC=16` 分块，维护 `m/l/O_acc`，不物化 `N×N` | [13 组 correctness](scripts/test_tiled.sh)、零 workspace、[完整 sanitizer](scripts/sanitize.sh) |
-| 并行归约 | 🔄 | 将 tile max/sum 从线程 0 串行计算改为 warp/block reduction | 尚未发布性能结论 |
+| 并行归约 | ✅ | warp shuffle 并行 max/exp/sum | [正确性、安全性与负性能结果](docs/parallel-reduction.md) |
 | `cp.async` 双缓冲 | ⬜ | 计算 current tile 时预取 next K/V tile | 计划中 |
 | 统一 benchmark | ⬜ | Naive/Tiled/Pipelined 公平墙钟比较 | 计划中 |
 | ncu 与 SASS | ⬜ | 分析 scoreboard、吞吐、资源与机器指令 | 计划中 |
@@ -95,15 +95,27 @@ $$
 - External workspace：`0` bytes
 - 支持 causal 全 mask tile
 - 支持最后一个不完整 K/V tile
-- 当前 tile max/sum 由线程 0 串行计算，作为下一阶段已知限制
+- 当前 tile max/sum 由线程 0 串行计算，作为并行归约实验的对照基线
 
 FlashAttention 没有把主导计算从 $O(N^2D)$ 降为 $O(ND)$；当前实现减少的是完整 `N×N` 中间矩阵的额外存储和 HBM 往返。
+
+## 已完成：Warp 并行归约实验
+
+并行版本保持 `BC=16`、K/V 布局、Online Softmax 数学和 `acc` 更新不变，只将 tile max/exp/sum 改为 warp 0 内的 shuffle 归约与状态广播。
+
+- Kernel：[kernels/tiled_parallel.cu](kernels/tiled_parallel.cu)
+- Correctness：[13 组固定回归](scripts/test_tiled_parallel.sh)
+- External workspace：`0` bytes
+- Safety：[统一 sanitizer](scripts/sanitize.sh)
+- 结果：[Warp 并行 Online Softmax 归约实验](docs/parallel-reduction.md)
+
+该实验没有获得稳定收益：`D=64` 仅改善约 1%，`D=128` 持平或回退约 4.4%；ncu 中 barrier、long/short scoreboard 和 warp latency 均未改善。原因是当前 tile 只有 16 个 Scores，串行工作本来较小，而 shuffle、状态广播、控制流和更高寄存器压力抵消了收益。该版本作为可复现负结果保留，不继续优化 `BC=16` reduction。
 
 ## 当前验证证据
 
 ### Correctness
 
-Tiled 固定测试矩阵覆盖：
+Tiled 与 Tiled Parallel 固定测试矩阵均覆盖：
 
 - 最小输入：`N=1,D=1`
 - 小规模可定位输入：`N=3,D=2`
@@ -118,14 +130,14 @@ Tiled 固定测试矩阵覆盖：
 
 ### Safety
 
-当前 Tiled baseline 已运行：
+当前 Naive、Tiled 和 Tiled Parallel 均已运行：
 
 - Compute Sanitizer memcheck
 - racecheck
 - synccheck
 - initcheck
 
-验证对象包含 causal 和非整除 `N=37,D=24`；仓库脚本统一覆盖当前 Naive 与 Tiled 两条路径。
+验证对象包含 causal 和非整除 `N=37,D=24`；Tiled Parallel 还包含 `N=33,D=128` 的全 mask shuffle memcheck。仓库脚本统一覆盖当前三条路径。
 
 ## 构建与当前验证
 
@@ -137,6 +149,7 @@ cmake --build --preset release-sm80 --target flash_attention_runner
 
 projects/flash_attention/scripts/validate.sh
 projects/flash_attention/scripts/test_tiled.sh
+projects/flash_attention/scripts/test_tiled_parallel.sh
 projects/flash_attention/scripts/sanitize.sh full
 ```
 
@@ -144,13 +157,12 @@ projects/flash_attention/scripts/sanitize.sh full
 
 ## 下一步
 
-当前唯一优化目标是 **并行归约与线程映射**：
+并行归约实验已经结束。下一步按单变量顺序推进：
 
-1. 保持 Online Tiled 数学和内存数据流不变；
-2. 将 tile max/sum 从线程 0 串行计算替换为 warp/block reduction；
-3. 记录修改前后的 registers/thread、shared memory/block 和正常墙钟；
-4. 若并行归约无收益，保留结果并解释并行开销或规模边界；
-5. correctness 与 sanitizer 全部通过后，再进入 `cp.async` 双缓冲。
+1. 尝试 `BC=32`，只改变 K/V tile 宽度；
+2. 比较 barrier、short scoreboard、bank conflict、occupancy 和正常墙钟；
+3. 无稳定收益则停止 tile-size 调优；
+4. 随后进入 K/V `cp.async` 双缓冲，并允许保留负结果。
 
 ## 项目原则
 

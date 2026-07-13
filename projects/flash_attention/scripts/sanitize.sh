@@ -73,9 +73,10 @@ run_sanitizer memcheck naive 37 24 1 random tail-causal
 run_sanitizer memcheck naive 37 24 0 negative-scores all-negative-softmax
 run_sanitizer memcheck tiled 37 24 1 random tail-causal-zero-workspace
 run_sanitizer memcheck tiled 37 24 0 negative-scores all-negative-online-softmax
+run_sanitizer memcheck tiled-parallel 33 128 1 negative-scores all-mask-shuffle
 
 if [[ $mode == full ]]; then
-    for kernel in naive tiled; do
+    for kernel in naive tiled tiled-parallel; do
         run_sanitizer racecheck "$kernel" 37 24 1 random shared-state
         run_sanitizer synccheck "$kernel" 37 24 1 random block-synchronization
         # initcheck covers uninitialized device-global reads, not shared memory.

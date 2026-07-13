@@ -23,6 +23,7 @@ target_compile_options(flash_attention_common
 add_library(flash_attention_kernels STATIC
     kernels/naive.cu
     kernels/tiled.cu
+    kernels/tiled_parallel.cu
 )
 
 target_include_directories(flash_attention_kernels
@@ -151,5 +152,15 @@ if(BUILD_TESTING)
     set_tests_properties(flash_attention_tiled_validate PROPERTIES
         PASS_REGULAR_EXPRESSION
             "\\[test_tiled\\] summary executions=13 pass=13 status=PASS"
+    )
+
+    add_test(
+        NAME flash_attention_tiled_parallel_validate
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_tiled_parallel.sh
+                $<TARGET_FILE:flash_attention_runner>
+    )
+    set_tests_properties(flash_attention_tiled_parallel_validate PROPERTIES
+        PASS_REGULAR_EXPRESSION
+            "\\[test_tiled_parallel\\] summary executions=13 pass=13 status=PASS"
     )
 endif()

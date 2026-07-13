@@ -55,17 +55,20 @@ projects/gemm/scripts/extract_sass.sh async-16b
 
 - Naive Materialized Attention：`QK^T → Stable Softmax → PV`；
 - Online Tiled Attention：K/V 分块、running `m/l/O_acc`、causal 和尾块；
+- Warp 并行归约：正确性与 sanitizer 通过，但没有稳定墙钟收益，作为负结果保留；
 - CPU double reference、统一 runner、CTest correctness 与 Compute Sanitizer 验证；
 - Tiled 路径不分配完整 `N×N` workspace。
 
-当前版本是单 batch、单 head、FP32 forward educational/research baseline。下一阶段将保持数学数据流不变，加入并行 tile reduction，再进入 `cp.async` 双缓冲、统一 benchmark、ncu 和 SASS 取证。尚未采集正式性能数据，因此这里不发布未验证的加速数字。
+当前版本是单 batch、单 head、FP32 forward educational/research baseline。下一阶段先做 `BC=32` 单变量 tile 实验，再进入 `cp.async` 双缓冲、统一 benchmark、ncu 和 SASS 取证。尚未采集正式 canonical 性能数据，因此这里不发布未经统一协议确认的加速数字。
 
 - [项目状态、已完成证据与迭代路线](projects/flash_attention/)
 - [Naive Materialized Kernel](projects/flash_attention/kernels/naive.cu)
 - [Online Tiled Kernel](projects/flash_attention/kernels/tiled.cu)
+- [Warp 并行归约 Kernel](projects/flash_attention/kernels/tiled_parallel.cu)
+- [并行归约负结果分析](projects/flash_attention/docs/parallel-reduction.md)
 - [Tiled correctness 入口](projects/flash_attention/scripts/test_tiled.sh)
 
 ## Roadmap
 
-- FlashAttention：开发中，Naive 与 Online Tiled correctness baseline 已完成。
+- FlashAttention：开发中，Naive、Online Tiled 与 Warp 并行归约实验已完成。
 - CUDA 常用算子：计划中，尚未实现。
