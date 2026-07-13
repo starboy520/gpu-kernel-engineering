@@ -1,6 +1,6 @@
 # FP32 FlashAttention 数据流重建
 
-**状态：开发中。当前已完成 Naive Materialized、Online Tiled、Warp 并行归约与 K/V `cp.async` 双缓冲实验。**
+**状态：当前教育版阶段完成。Naive Materialized、Online Tiled、Warp 并行归约、K/V `cp.async` 双缓冲与性能证据均已收口。**
 
 本项目从标准 Scaled Dot-Product Attention 出发，在 NVIDIA A100（`sm_80`）上逐步重建不物化完整 `N×N` Scores 的 FlashAttention 数据流。当前定位是 **educational/research FP32 forward implementation**，重点是独立手写、正确性边界和可解释的性能工程过程，不宣称生产级 FlashAttention-2。
 

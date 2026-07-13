@@ -49,9 +49,9 @@ projects/gemm/scripts/extract_sass.sh async-16b
 
 完整验收顺序、输出路径和自定义 runner 用法见 [GEMM 性能实验方法](projects/gemm/docs/methodology.md) 与 [Kernel 验收手册](projects/gemm/docs/kernel-verification-guide.md)。
 
-## In Progress：FP32 FlashAttention 数据流重建
+## Featured Project：FP32 FlashAttention 数据流重建
 
-第二个作品正在迭代中。当前已完成：
+第二个作品的当前教育版范围已经完成：
 
 - Naive Materialized Attention：`QK^T → Stable Softmax → PV`；
 - Online Tiled Attention：K/V 分块、running `m/l/O_acc`、causal 和尾块；
