@@ -22,6 +22,7 @@ target_compile_options(flash_attention_common
 
 add_library(flash_attention_kernels STATIC
     kernels/naive.cu
+    kernels/tiled.cu
 )
 
 target_include_directories(flash_attention_kernels
@@ -140,5 +141,15 @@ if(BUILD_TESTING)
     )
     add_flash_attention_naive_validation_test(
         flash_attention_naive_zero_qk_causal_validate 37 24 1 zero-qk
+    )
+
+    add_test(
+        NAME flash_attention_tiled_validate
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_tiled.sh
+                $<TARGET_FILE:flash_attention_runner>
+    )
+    set_tests_properties(flash_attention_tiled_validate PROPERTIES
+        PASS_REGULAR_EXPRESSION
+            "\\[test_tiled\\] summary executions=13 pass=13 status=PASS"
     )
 endif()

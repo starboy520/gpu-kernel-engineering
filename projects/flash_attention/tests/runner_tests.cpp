@@ -153,17 +153,26 @@ void test_special_input_pattern_semantics() {
 void test_registry_and_workspace() {
     const std::vector<flash_attention::KernelDescriptor> kernels =
         flash_attention::registered_kernels();
-    check(kernels.size() == 1, "registry contains one learning kernel");
-    if (kernels.size() == 1) {
-        const flash_attention::KernelDescriptor &kernel = kernels[0];
-        check(std::string_view(kernel.name) == "naive",
+    check(kernels.size() == 2, "registry contains naive and tiled kernels");
+    if (kernels.size() == 2) {
+        const flash_attention::KernelDescriptor &naive = kernels[0];
+        check(std::string_view(naive.name) == "naive",
               "registered kernel is naive");
-        check(kernel.launch == flash_attention::launch_naive_materialized,
+        check(naive.launch == flash_attention::launch_naive_materialized,
               "descriptor uses naive launcher");
-        check(kernel.author_kernel, "naive is an author kernel");
-        check(kernel.workspace_bytes({37, 24, false}) ==
+        check(naive.author_kernel, "naive is an author kernel");
+        check(naive.workspace_bytes({37, 24, false}) ==
                   static_cast<std::size_t>(37 * 37) * sizeof(float),
               "naive workspace is N*N floats");
+
+        const flash_attention::KernelDescriptor &tiled = kernels[1];
+        check(std::string_view(tiled.name) == "tiled",
+              "second registered kernel is tiled");
+        check(tiled.launch == flash_attention::launch_tiled_online,
+              "descriptor uses tiled launcher");
+        check(tiled.author_kernel, "tiled is an author kernel");
+        check(tiled.workspace_bytes({37, 24, false}) == 0,
+              "tiled does not materialize N*N workspace");
     }
     check(flash_attention::find_kernel("missing") == nullptr,
           "unknown kernel is not found");

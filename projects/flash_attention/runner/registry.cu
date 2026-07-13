@@ -15,9 +15,12 @@ std::size_t naive_workspace_bytes(flash_attention::Problem problem) {
     return n * n * sizeof(float);
 }
 
-const std::array<flash_attention::KernelDescriptor, 1> kernel_table{{
+std::size_t no_workspace_bytes(flash_attention::Problem) { return 0; }
+
+const std::array<flash_attention::KernelDescriptor, 2> kernel_table{{
     {"naive", flash_attention::launch_naive_materialized, naive_workspace_bytes,
      true},
+    {"tiled", flash_attention::launch_tiled_online, no_workspace_bytes, true},
 }};
 
 } // namespace

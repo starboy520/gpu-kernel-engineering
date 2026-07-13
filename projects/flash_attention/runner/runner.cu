@@ -26,7 +26,9 @@ constexpr double kValidationRtol = 2.0e-3;
 class DeviceBuffer {
   public:
     explicit DeviceBuffer(std::size_t bytes) : pointer_(nullptr) {
-        FA_CUDA_CHECK(cudaMalloc(&pointer_, bytes));
+        if (bytes != 0) {
+            FA_CUDA_CHECK(cudaMalloc(&pointer_, bytes));
+        }
     }
 
     ~DeviceBuffer() {
@@ -337,7 +339,10 @@ int run(const RunnerOptions &options, std::ostream &output) {
     // 0xFF is a NaN bit pattern for float. An unimplemented or incomplete
     // kernel therefore fails validation instead of accidentally passing.
     FA_CUDA_CHECK(cudaMemset(device_output.data(), 0xFF, bytes));
-    FA_CUDA_CHECK(cudaMemset(device_workspace.data(), 0xFF, workspace_bytes));
+    if (workspace_bytes != 0) {
+        FA_CUDA_CHECK(
+            cudaMemset(device_workspace.data(), 0xFF, workspace_bytes));
+    }
 
     const LaunchResult validation_launch = kernel->launch(
         device_q.data(), device_k.data(), device_v.data(), device_output.data(),
