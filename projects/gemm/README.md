@@ -43,7 +43,7 @@ Vectorized 的 SASS 中有 14 条静态 `LDG.E.128`；Async 16B 则生成 4 条 
 
 ## Async 负结果
 
-在同一 `2048³` profile 协议下，Async 16B 相比 Vectorized：long scoreboard 从 `1.88` 降到 `0.05`，但 short scoreboard 从 `0.49` 升到 `1.87`，shared load bank conflict 从 `1.3-way` 升到 `2.2-way`。`cp.async` 隐藏了大部分 global-memory dependency，瓶颈却转移到 shared-memory 访问，最终 Async 为 12.29 TFLOPS，仅为 cuBLAS 的 69.6%，比 Vectorized 慢约 4.7%。
+在同一 `2048³` profile 协议下，Async 16B 相比 Vectorized：long scoreboard 从 `1.88` 降到 `0.05`，但 short scoreboard 从 `0.49` 升到 `1.87`，shared load bank conflict 从 `1.3-way` 升到 `2.2-way`。`cp.async` 隐藏了大部分 global-memory dependency，瓶颈却转移到 shared-memory 访问。正式 benchmark 中 Async 为 12.29 TFLOPS，仅为 cuBLAS 的 69.6%，墙钟延迟比 Vectorized 增加约 4.8%。
 
 首版没有加入 swizzle。直接 padding 会破坏后续 shared row 的 16B async-copy alignment；正确处理需要成对修改 shared-memory 写入和读取映射。这个实验保留为可解释的负结果，不用局部 profiler 改善替代最终 wall-clock 结论。详见 [Async 阶段分析](docs/async-pipeline.md) 和 [实验方法](docs/methodology.md)。
 

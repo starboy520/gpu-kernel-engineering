@@ -15,7 +15,7 @@
 | Async 16B | 1.398333 ms | 12.29 TFLOPS | 69.6% cuBLAS |
 | cuBLAS pedantic FP32 | 0.973251 ms | 17.65 TFLOPS | 100% |
 
-Async 16B 没有超过 Vectorized，但仍作为负结果保留：`cp.async` 降低了 long-scoreboard stall，代价是更高的 short-scoreboard stall 和 shared-memory bank conflict，最终墙钟性能回退约 4.7%。
+Async 16B 没有超过 Vectorized，但仍作为负结果保留：`cp.async` 降低了 long-scoreboard stall，代价是更高的 short-scoreboard stall 和 shared-memory bank conflict，最终墙钟性能回退约 4.8%。
 
 - [项目说明与优化阶梯](projects/gemm/)
 - [canonical 三组 shape 结果表](projects/gemm/results/generated/a100-fp32.md)
@@ -49,7 +49,23 @@ projects/gemm/scripts/extract_sass.sh async-16b
 
 完整验收顺序、输出路径和自定义 runner 用法见 [GEMM 性能实验方法](projects/gemm/docs/methodology.md) 与 [Kernel 验收手册](projects/gemm/docs/kernel-verification-guide.md)。
 
+## In Progress：FP32 FlashAttention 数据流重建
+
+第二个作品正在迭代中。当前已完成：
+
+- Naive Materialized Attention：`QK^T → Stable Softmax → PV`；
+- Online Tiled Attention：K/V 分块、running `m/l/O_acc`、causal 和尾块；
+- CPU double reference、统一 runner、CTest correctness 与 Compute Sanitizer 验证；
+- Tiled 路径不分配完整 `N×N` workspace。
+
+当前版本是单 batch、单 head、FP32 forward educational/research baseline。下一阶段将保持数学数据流不变，加入并行 tile reduction，再进入 `cp.async` 双缓冲、统一 benchmark、ncu 和 SASS 取证。尚未采集正式性能数据，因此这里不发布未验证的加速数字。
+
+- [项目状态、已完成证据与迭代路线](projects/flash_attention/)
+- [Naive Materialized Kernel](projects/flash_attention/kernels/naive.cu)
+- [Online Tiled Kernel](projects/flash_attention/kernels/tiled.cu)
+- [Tiled correctness 入口](projects/flash_attention/scripts/test_tiled.sh)
+
 ## Roadmap
 
-- FlashAttention：计划中，尚未实现。
+- FlashAttention：开发中，Naive 与 Online Tiled correctness baseline 已完成。
 - CUDA 常用算子：计划中，尚未实现。

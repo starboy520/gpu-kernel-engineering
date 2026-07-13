@@ -13,8 +13,7 @@
             "binaryDir": "${sourceDir}/build",
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release",
-                "CMAKE_CUDA_ARCHITECTURES": "80",
-                "CMAKE_CUDA_COMPILER": "/usr/local/cuda/bin/nvcc"
+                "CMAKE_CUDA_ARCHITECTURES": "80"
             }
         }
     ],

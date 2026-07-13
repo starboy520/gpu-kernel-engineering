@@ -41,18 +41,19 @@ command_count=0
 
 run_sanitizer() {
     local tool="$1"
-    local n="$2"
-    local d="$3"
-    local causal="$4"
-    local input_pattern="$5"
-    local intent="$6"
+    local kernel="$2"
+    local n="$3"
+    local d="$4"
+    local causal="$5"
+    local input_pattern="$6"
+    local intent="$7"
     local output
     local exit_code
 
-    printf '[sanitize] tool=%s kernel=naive shape=%sx%s causal=%s input_pattern=%s intent=%s\n' \
-        "$tool" "$n" "$d" "$causal" "$input_pattern" "$intent"
+    printf '[sanitize] tool=%s kernel=%s shape=%sx%s causal=%s input_pattern=%s intent=%s\n' \
+        "$tool" "$kernel" "$n" "$d" "$causal" "$input_pattern" "$intent"
     if output="$(compute-sanitizer --tool "$tool" --error-exitcode=99 \
-        "$runner" --kernel naive --n "$n" --d "$d" --causal "$causal" \
+        "$runner" --kernel "$kernel" --n "$n" --d "$d" --causal "$causal" \
         --input-pattern "$input_pattern" --mode validate --warmup 0 \
         --iterations 1 2>&1)"; then
         exit_code=0
@@ -63,19 +64,23 @@ run_sanitizer() {
     ((command_count += 1))
 
     ((exit_code == 0)) || die "sanitizer 失败: tool=$tool exit=$exit_code"
-    has_token "$output" 'kernel=naive' || die '输出缺少 kernel=naive'
-    has_token "$output" 'path=naive' || die '输出缺少 path=naive'
+    has_token "$output" "kernel=$kernel" || die "输出缺少 kernel=$kernel"
+    has_token "$output" "path=$kernel" || die "输出缺少 path=$kernel"
     has_token "$output" 'status=PASS' || die '输出缺少 status=PASS'
 }
 
-run_sanitizer memcheck 37 24 1 random tail-causal
-run_sanitizer memcheck 37 24 0 negative-scores all-negative-softmax
+run_sanitizer memcheck naive 37 24 1 random tail-causal
+run_sanitizer memcheck naive 37 24 0 negative-scores all-negative-softmax
+run_sanitizer memcheck tiled 37 24 1 random tail-causal-zero-workspace
+run_sanitizer memcheck tiled 37 24 0 negative-scores all-negative-online-softmax
 
 if [[ $mode == full ]]; then
-    run_sanitizer racecheck 37 24 1 random shared-reduction
-    run_sanitizer synccheck 37 24 1 random shared-reduction
-    # initcheck covers uninitialized device-global reads, not shared memory.
-    run_sanitizer initcheck 37 24 1 random global-memory-initialization
+    for kernel in naive tiled; do
+        run_sanitizer racecheck "$kernel" 37 24 1 random shared-state
+        run_sanitizer synccheck "$kernel" 37 24 1 random block-synchronization
+        # initcheck covers uninitialized device-global reads, not shared memory.
+        run_sanitizer initcheck "$kernel" 37 24 1 random global-memory-initialization
+    done
 fi
 
 printf '[sanitize] summary mode=%s commands=%d status=PASS\n' \

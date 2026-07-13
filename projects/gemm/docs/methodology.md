@@ -72,7 +72,7 @@ Nsight Compute 会锁定 GPU 时钟，并为了采集不同 counter 对同一次
 3. **指标是否支持？** 同协议比较 registers、occupancy、throughput、stall、bank conflict 和 SASS。
 4. **wall-clock 是否改善？** 用正式 benchmark 中位数确认 profiler 改善是否转化为端到端收益。
 
-Async 16B 是需要保留的负结果：128-bit `LDGSTS` 已生成，long scoreboard 也显著下降，但最终 wall-clock 仍比 Vectorized 慢约 4.7%。这不是失败数据，不应删除或只展示局部利好。shared-memory swizzle 需要同时满足 16B async-copy 对齐和新的 bank 映射，首版明确延后；若继续实验，应先只改变 A 的 shared layout，再按同一协议重新回答上面的四个问题。
+Async 16B 是需要保留的负结果：128-bit `LDGSTS` 已生成，long scoreboard 也显著下降，但正式 benchmark 的墙钟延迟仍比 Vectorized 增加约 4.8%。这不是失败数据，不应删除或只展示局部利好。shared-memory swizzle 需要同时满足 16B async-copy 对齐和新的 bank 映射，首版明确延后；若继续实验，应先只改变 A 的 shared layout，再按同一协议重新回答上面的四个问题。
 
 ## 正式 A100 数据集
 
