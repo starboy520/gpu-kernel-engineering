@@ -173,6 +173,9 @@ projects/flash_attention/scripts/sanitize.sh full
 projects/flash_attention/scripts/benchmark.sh
 projects/flash_attention/scripts/profile.sh tiled 512 128 0
 projects/flash_attention/scripts/profile.sh tiled-async 512 128 0
+projects/flash_attention/scripts/summarize_ncu.py \
+    projects/flash_attention/results/profiles/tiled-512x128-causal0.ncu-rep \
+    projects/flash_attention/results/profiles/tiled-async-512x128-causal0.ncu-rep
 projects/flash_attention/scripts/extract_sass.sh tiled
 projects/flash_attention/scripts/extract_sass.sh tiled-async
 ```

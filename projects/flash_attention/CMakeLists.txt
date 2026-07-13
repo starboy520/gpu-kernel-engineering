@@ -115,6 +115,12 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/render_results_test.py
     )
 
+    add_test(
+        NAME flash_attention_summarize_ncu_tests
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/summarize_ncu_test.py
+    )
+
     function(add_flash_attention_naive_validation_test test_name n d causal input_pattern)
         add_test(
             NAME ${test_name}
