@@ -66,5 +66,6 @@ projects/gemm/scripts/extract_sass.sh async-16b
 ## Roadmap
 
 - FlashAttention：Naive、Online Tiled、Warp 并行归约、`cp.async`、canonical benchmark、ncu 与 SASS 证据已完成。
-- Attention Lab：后续学习路线移至独立 `cuda_study` 仓库；本仓库只保留已经实现并可复现的作品证据。
+- [Advanced Attention Prefill](projects/attention_prefill/)：M1 `Br=4` Query-tiled FP32 SIMT correctness/safety 已完成，性能证据待采集。
+- Attention Lab 的完整学习路线保存在独立 `cuda_study` 仓库；本仓库只保留已经开始实现并可复现的作品。
 - CUDA 常用算子：计划中，尚未实现。
