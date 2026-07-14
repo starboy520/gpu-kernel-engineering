@@ -96,3 +96,5 @@ seed：1234
 ```
 
 canonical 数据保存在 `projects/gemm/results/raw/a100-fp32.csv`，展示表由脚本生成到 `projects/gemm/results/generated/a100-fp32.md`。CSV 中包含实际执行路径、reference 来源、误差、工具链和 Git commit；对外引用性能数字时以 canonical CSV 为准。
+
+大 shape 超过 CPU reference 工作量阈值时，手写 Kernel 的 expected 由 cuBLAS pedantic FP32 生成。`cublas-fp32` 自身在这些 shape 上是同实现自验证，不能作为独立 correctness 证据；小 shape CPU reference cases 才提供独立数值检查。大 shape cuBLAS 行的主要用途是性能标尺。

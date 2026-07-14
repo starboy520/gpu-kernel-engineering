@@ -17,6 +17,8 @@
 
 数据来自 A100 80GB PCIe，测试代码 commit `505f789`；cuBLAS 使用 pedantic FP32。每个 kernel 先 warmup 10 次、再计时 50 次，独立重复 3 轮后取 latency 中位数。
 
+大 shape 超过 CPU reference 阈值时，手写 Kernel 使用 cuBLAS pedantic FP32 生成 expected output；但 `cublas-fp32` 被测路径的 expected 与 actual 来自同一实现，因此该行 `passed=true` 只验证 runner/执行流程，不是独立 correctness 证明。cuBLAS 的独立正确性边界由小 shape CPU reference cases 覆盖，正式大 shape 数据主要作为性能标尺。
+
 CSV 中 `1024³` 的手写版本会看到 `max_rel=1.761818`，但对应 `max_abs=0.000019`。最差相对误差出现在 reference 接近 0 的元素上，分母很小会放大比例；固定验收阈值仍要求全局 `max_abs≤1e-3` 或全局 `max_rel≤2e-3`，该组数据通过的是更有意义的绝对误差条件。
 
 [完整 512³ / 1024³ / 2048³ 结果表](results/generated/a100-fp32.md) · [canonical raw CSV](results/raw/a100-fp32.csv) · [结果字段说明](results/README.md)
@@ -27,12 +29,12 @@ CSV 中 `1024³` 的手写版本会看到 `max_rel=1.761818`，但对应 `max_ab
 
 | 阶段 | 核心变化 | 阶段结果 |
 | --- | --- | --- |
-| [Naive](docs/naive.md) | 每个 thread 计算一个输出 | 3.66 TFLOPS，基线 |
-| [Shared memory tiling](docs/shared-tiled.md) | A/B tile 数据复用 | 1.46× Naive |
-| [2D register tiling](docs/register-tiled.md) | 每个 thread 计算 `8×4` 输出 | 1.22× Shared |
+| Naive | 每个 thread 计算一个输出 | 3.66 TFLOPS，基线 |
+| Shared memory tiling | A/B tile 数据复用 | 1.46× Naive |
+| 2D register tiling | 每个 thread 计算 `8×4` 输出 | 1.22× Shared |
 | [`float4` Vectorized](docs/vectorized.md) | 128-bit global load | 1.98× Register，12.88 TFLOPS |
 | [`cp.async` 双缓冲](docs/async-pipeline.md) | 16B global-to-shared async copy | 0.95× Vectorized，负收益 |
-| [cuBLAS baseline](docs/cublas-baseline.md) | pedantic FP32 reference | Vectorized 达到 73.0% |
+| cuBLAS baseline | pedantic FP32 reference | Vectorized 达到 73.0% |
 
 `512³` 和 `1024³` 上的排序并不一致：例如 `512³` 的 Register 版本慢于 Shared，`1024³` 两者基本持平。小规模问题更容易受 launch、tile/grid 数量和并行度影响，因此这里不宣称优化阶梯对每个 shape 都单调加速，完整对照以 [三组 shape 正式表](results/generated/a100-fp32.md) 为准。
 
@@ -47,20 +49,6 @@ Vectorized 的 SASS 中有 14 条静态 `LDG.E.128`；Async 16B 则生成 4 条 
 
 首版没有加入 swizzle。直接 padding 会破坏后续 shared row 的 16B async-copy alignment；正确处理需要成对修改 shared-memory 写入和读取映射。这个实验保留为可解释的负结果，不用局部 profiler 改善替代最终 wall-clock 结论。详见 [Async 阶段分析](docs/async-pipeline.md) 和 [实验方法](docs/methodology.md)。
 
-## 下一阶段：Tensor Core v2（规划中）
-
-当前 FP32 CUDA Core 首版已经完成。下一阶段计划新增独立的 FP16 Tensor Core 路线，目前处于系统学习与实验准备阶段，尚未提交 Tensor Core kernel，也不声明尚未测得的性能结果。
-
-- [ ] 用 WMMA 完成 FP16 输入、FP32 累加的正确性基线
-- [ ] 手写单 warp `mma.sync.m16n8k16`，验证 lane/fragment 映射
-- [ ] 完成 `ldmatrix` 与转置加载实验，记录 shared-memory 到寄存器的映射
-- [ ] 从 instruction tile 扩展到 warp tile 和多 warp block tile
-- [ ] 加入 `cp.async` 多 stage pipeline，并验证同步与 stage 复用
-- [ ] 建立 FP16 cuBLAS Tensor Core baseline、独立容差和独立结果表
-- [ ] 使用 wall-clock、ncu 和 `HMMA`/`LDSM` SASS 形成完整证据链
-
-Tensor Core 路线不会与当前 pedantic FP32 数据混表，因为 FP16/TF32 改变了乘法输入精度。详细的概念、分阶段练习、正确性设计和验收标准见 [A100 Tensor Core GEMM 学习与实现路线](docs/tensor-core-learning.md)。
-
 ## Build
 
 需要 CUDA Toolkit、CMake 3.25+，默认目标架构为 `sm_80`。以下命令从仓库根目录执行：
@@ -72,7 +60,7 @@ cmake --build build -j
 
 ## 验收与复现
 
-每个 kernel 共用同一套 runner、reference 和计时框架，并按 [CUDA GEMM Kernel 验收手册](docs/kernel-verification-guide.md) 执行。正式数据采集与 profiler 解读规则见 [GEMM 性能实验方法](docs/methodology.md)。
+每个 kernel 共用同一套 runner、reference 和计时框架。正式数据采集与 profiler 解读规则见 [GEMM 性能实验方法](docs/methodology.md)。
 
 ```bash
 projects/gemm/scripts/validate.sh
@@ -111,4 +99,4 @@ projects/gemm/scripts/benchmark.sh
 
 Vectorized 与 Async 16B fast path 要求 A/B 基地址 16B 对齐，并满足 `K % 4 == 0`、`N % 4 == 0`；M 可以有尾块。不满足条件时，launcher 整体 fallback 到 Register Tiling，而不是在同一个 kernel 内混合 scalar/vector path。
 
-截至当前，首版不包含 Tensor Core、转置输入和 batched GEMM，也没有实现 shared-memory swizzle；Tensor Core v2 仍是上述公开路线图中的待办项。当前结果只针对仓库记录的 A100 `sm_80` 环境与三组方阵 shape；跨 GPU、工具链或协议的数据不直接比较。
+截至当前，首版不包含 Tensor Core、转置输入和 batched GEMM，也没有实现 shared-memory swizzle。后续学习路线移至独立 `cuda_study` 仓库；当前结果只针对仓库记录的 A100 `sm_80` 环境与三组方阵 shape，跨 GPU、工具链或协议的数据不直接比较。

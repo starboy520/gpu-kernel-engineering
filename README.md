@@ -4,16 +4,7 @@
 
 ## Featured Project：FP32 GEMM
 
-在 row-major `C = A × B` 上完成从 Naive 到 `float4` Vectorized、再到 `cp.async` 双缓冲的优化阶梯。正式 `2048³` 结果中，Vectorized 达到 **12.88 TFLOPS / 73.0% cuBLAS**。
-
-| 阶段 | Latency | Throughput | 相对结果 |
-| --- | ---: | ---: | --- |
-| Naive | 4.697866 ms | 3.66 TFLOPS | 20.7% cuBLAS |
-| Shared tiled | 3.222119 ms | 5.33 TFLOPS | 1.46× Naive |
-| Register tiled | 2.644419 ms | 6.50 TFLOPS | 1.22× Shared |
-| Vectorized | 1.333719 ms | 12.88 TFLOPS | 73.0% cuBLAS |
-| Async 16B | 1.398333 ms | 12.29 TFLOPS | 69.6% cuBLAS |
-| cuBLAS pedantic FP32 | 0.973251 ms | 17.65 TFLOPS | 100% |
+在 row-major `C = A × B` 上完成从 Naive 到 `float4` Vectorized、再到 `cp.async` 双缓冲的优化阶梯。正式 `2048³` 结果中，Vectorized 达到 **12.88 TFLOPS / 73.0% cuBLAS**；Async 16B 因 Shared Memory 瓶颈转移回退约 4.8%，作为负结果保留。
 
 Async 16B 没有超过 Vectorized，但仍作为负结果保留：`cp.async` 降低了 long-scoreboard stall，代价是更高的 short-scoreboard stall 和 shared-memory bank conflict，最终墙钟性能回退约 4.8%。
 
@@ -47,7 +38,7 @@ projects/gemm/scripts/extract_sass.sh vectorized
 projects/gemm/scripts/extract_sass.sh async-16b
 ```
 
-完整验收顺序、输出路径和自定义 runner 用法见 [GEMM 性能实验方法](projects/gemm/docs/methodology.md) 与 [Kernel 验收手册](projects/gemm/docs/kernel-verification-guide.md)。
+完整验收顺序、输出路径和自定义 runner 用法见 [GEMM 性能实验方法](projects/gemm/docs/methodology.md)。
 
 ## Featured Project：FP32 FlashAttention 数据流重建
 
@@ -69,12 +60,11 @@ projects/gemm/scripts/extract_sass.sh async-16b
 - [并行归约负结果分析](projects/flash_attention/docs/parallel-reduction.md)
 - [`cp.async` 双缓冲实验](projects/flash_attention/docs/async-pipeline.md)
 - [FlashAttention 性能实验方法](projects/flash_attention/docs/methodology.md)
-- [Nsight Compute 实操手册](projects/flash_attention/docs/ncu-hands-on.md)
 - [A100 canonical benchmark](projects/flash_attention/results/generated/a100-fp32.md)
 - [Tiled correctness 入口](projects/flash_attention/scripts/test_tiled.sh)
 
 ## Roadmap
 
 - FlashAttention：Naive、Online Tiled、Warp 并行归约、`cp.async`、canonical benchmark、ncu 与 SASS 证据已完成。
-- Attention Lab：[里程碑路线图](ATTENTION_ROADMAP.md)按证据门槛继续 Advanced Prefill，再进入 Decode、Split-KV、PagedAttention 与 Continuous Batching。
+- Attention Lab：后续学习路线移至独立 `cuda_study` 仓库；本仓库只保留已经实现并可复现的作品证据。
 - CUDA 常用算子：计划中，尚未实现。

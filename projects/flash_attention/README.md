@@ -30,7 +30,7 @@ D：1..128
 | 并行归约 | ✅ | warp shuffle 并行 max/exp/sum | [正确性、安全性与负性能结果](docs/parallel-reduction.md) |
 | `cp.async` 双缓冲 | ✅ | 双 stage 16B K/V 异步预取 | [Correctness、安全性、SASS 与混合性能结果](docs/async-pipeline.md) |
 | 统一 benchmark | ✅ | 48 行 canonical 矩阵、重复中位数与收益边界 | [结果表](results/generated/a100-fp32.md)、[实验方法](docs/methodology.md) |
-| ncu 与 SASS | ✅ | 分析 scoreboard、吞吐、资源与机器指令 | [ncu 实操手册](docs/ncu-hands-on.md)、[profile](scripts/profile.sh)、[SASS](scripts/extract_sass.sh) |
+| ncu 与 SASS | ✅ | 分析 scoreboard、吞吐、资源与机器指令 | [实验方法](docs/methodology.md)、[profile](scripts/profile.sh)、[SASS](scripts/extract_sass.sh) |
 | 作品化收口 | ✅ | 方法文档、正式结果、复现脚本、限制说明 | 当前 README 与分层证据文档 |
 
 这里的状态以仓库中可以重新运行的代码和测试为准，不以计划或历史实验数据代替当前证据。
@@ -182,14 +182,13 @@ projects/flash_attention/scripts/extract_sass.sh tiled-async
 
 - [统一性能实验方法](docs/methodology.md)
 - [A100 canonical benchmark](results/generated/a100-fp32.md)
-- [Nsight Compute 实操手册](docs/ncu-hands-on.md)
 - [结果目录与证据分层](results/README.md)
 
 也可以通过 VS Code CMake Tools 选择 `release-sm80` preset，构建 `flash_attention_runner`，并在 Test Explorer 中运行 `flash_attention_tiled_validate`。
 
 ## 下一步
 
-Naive、Online Tiled、并行归约、`cp.async` 双缓冲、canonical benchmark、ncu 与 SASS 证据均已收口。后续学习按仓库级 [Attention Lab 里程碑路线图](../../ATTENTION_ROADMAP.md)推进：先完成 Query-tiled、低精度、Tensor Core、FA2-style Mapping 与 Backward，再进入独立 Decode、Split-KV、PagedAttention 和 Continuous Batching。
+Naive、Online Tiled、并行归约、`cp.async` 双缓冲、canonical benchmark、ncu 与 SASS 证据均已收口。后续 Query-tiled、Tensor Core、Backward 与 Decode/PagedAttention 学习路线放在独立 `cuda_study` 仓库，本项目保持为可复现基线。
 
 `BC=32` 不作为当前主线；仅当后续证据表明 tile 宽度是必要变量时再单独评估。
 
