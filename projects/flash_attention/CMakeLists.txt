@@ -2,7 +2,6 @@ find_package(CUDAToolkit REQUIRED)
 
 add_library(flash_attention_common STATIC
     common/reference.cpp
-    common/validation.cpp
 )
 
 target_include_directories(flash_attention_common
@@ -12,6 +11,7 @@ target_include_directories(flash_attention_common
 
 target_link_libraries(flash_attention_common
     PUBLIC
+    gpu_kernel_common
         CUDA::cudart
 )
 
@@ -34,6 +34,7 @@ target_include_directories(flash_attention_kernels
 
 target_link_libraries(flash_attention_kernels
     PUBLIC
+        gpu_kernel_headers
         CUDA::cudart
 )
 

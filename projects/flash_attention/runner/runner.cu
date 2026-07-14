@@ -3,9 +3,9 @@
 #include "flash_attention/cuda_check.hpp"
 #include "flash_attention/reference.hpp"
 #include "flash_attention/validation.hpp"
+#include "gpu_kernel/runner_utils.hpp"
 
 #include <algorithm>
-#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <iomanip>
@@ -14,7 +14,6 @@
 #include <random>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 #include <vector>
 
 namespace flash_attention {
@@ -64,11 +63,7 @@ class EventHandle {
 
 std::size_t checked_multiply_impl(std::size_t left, std::size_t right,
                                   std::string_view description) {
-    if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left) {
-        throw std::overflow_error("size overflow while computing " +
-                                  std::string(description));
-    }
-    return left * right;
+    return gpu_kernel::checked_multiply(left, right, description);
 }
 
 std::size_t tensor_count(Problem problem) {
@@ -121,31 +116,6 @@ void apply_input_pattern_impl(InputPattern input_pattern, Problem problem,
             k[static_cast<std::size_t>(key) * problem.d + feature] = key_value;
         }
     }
-}
-
-std::string require_value(int argc, const char *const argv[], int &index,
-                          const std::string &option) {
-    if (index + 1 >= argc) {
-        throw std::invalid_argument("missing value for " + option);
-    }
-    return argv[++index];
-}
-
-template <typename Integer>
-Integer parse_integer(const std::string &text, const std::string &option) {
-    Integer value{};
-    const char *begin = text.data();
-    const char *end = begin + text.size();
-    const auto result = std::from_chars(begin, end, value);
-    if (result.ec == std::errc::result_out_of_range) {
-        throw std::invalid_argument("integer overflow for " + option + ": " +
-                                    text);
-    }
-    if (result.ec != std::errc{} || result.ptr != end) {
-        throw std::invalid_argument("invalid integer for " + option + ": " +
-                                    text);
-    }
-    return value;
 }
 
 const char *path_or_name(const LaunchResult &result,
@@ -207,23 +177,23 @@ RunnerOptions parse_arguments(int argc, const char *const argv[]) {
         } else if (option == "--list") {
             options.list = true;
         } else if (option == "--kernel") {
-            options.kernel = require_value(argc, argv, index, option);
+            options.kernel = gpu_kernel::require_value(argc, argv, index, option);
         } else if (option == "--n") {
-            options.problem.n = parse_integer<int>(
-                require_value(argc, argv, index, option), option);
+            options.problem.n = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--d") {
-            options.problem.d = parse_integer<int>(
-                require_value(argc, argv, index, option), option);
+            options.problem.d = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--causal") {
-            const int causal = parse_integer<int>(
-                require_value(argc, argv, index, option), option);
+            const int causal = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
             if (causal != 0 && causal != 1) {
                 throw std::invalid_argument("--causal must be 0 or 1");
             }
             options.problem.causal = causal == 1;
         } else if (option == "--input-pattern") {
             const std::string pattern =
-                require_value(argc, argv, index, option);
+                gpu_kernel::require_value(argc, argv, index, option);
             if (pattern == "random") {
                 options.input_pattern = InputPattern::random;
             } else if (pattern == "zero-qk") {
@@ -236,7 +206,8 @@ RunnerOptions parse_arguments(int argc, const char *const argv[]) {
                     " (expected random, zero-qk, or negative-scores)");
             }
         } else if (option == "--mode") {
-            const std::string mode = require_value(argc, argv, index, option);
+            const std::string mode =
+                gpu_kernel::require_value(argc, argv, index, option);
             if (mode == "validate") {
                 options.mode = RunMode::validate;
             } else if (mode == "benchmark") {
@@ -246,14 +217,14 @@ RunnerOptions parse_arguments(int argc, const char *const argv[]) {
                     "--mode must be validate or benchmark");
             }
         } else if (option == "--warmup") {
-            options.warmup = parse_integer<int>(
-                require_value(argc, argv, index, option), option);
+            options.warmup = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--iterations") {
-            options.iterations = parse_integer<int>(
-                require_value(argc, argv, index, option), option);
+            options.iterations = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--seed") {
-            options.seed = parse_integer<std::uint32_t>(
-                require_value(argc, argv, index, option), option);
+            options.seed = gpu_kernel::parse_integer<std::uint32_t>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else {
             throw std::invalid_argument("unknown option: " + option);
         }

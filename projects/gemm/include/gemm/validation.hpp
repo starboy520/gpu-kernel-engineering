@@ -1,23 +1,11 @@
 #pragma once
 
-#include <cstddef>
+#include "gpu_kernel/validation.hpp"
 
 namespace gemm {
 
-struct ErrorMetrics {
-    double max_abs;
-    double max_rel;
-    std::size_t worst_index;
-    float expected;
-    float actual;
-    bool finite;
-};
+using gpu_kernel::compare;
+using gpu_kernel::ErrorMetrics;
+using gpu_kernel::passes;
 
-ErrorMetrics compare(const float* expected, const float* actual, std::size_t count);
-
-// Conservatively accepts only when all elements meet the absolute tolerance or
-// all elements meet the relative tolerance; mixed allclose cases may be rejected.
-// Throws std::invalid_argument when either tolerance is negative.
-bool passes(const ErrorMetrics& metrics, double atol, double rtol);
-
-}  // namespace gemm
+} // namespace gemm

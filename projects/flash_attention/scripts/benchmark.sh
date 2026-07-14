@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../../.." && pwd)"
+source "$repo_root/common/scripts/common.sh"
 runner="${1:-$repo_root/build/projects/flash_attention/flash_attention_runner}"
 renderer="$script_dir/render_results.py"
 official_csv="$repo_root/projects/flash_attention/results/raw/a100-fp32.csv"
@@ -24,14 +25,8 @@ usage() {
     printf '覆盖变量: FA_SHAPES FA_CAUSAL FA_WARMUP FA_ITERATIONS FA_REPEATS FA_OUTPUT_CSV FA_OUTPUT_MD FA_BUILD_PRESET FA_ALLOW_DIRTY\n' >&2
 }
 
-die() {
-    printf 'benchmark: %s\n' "$*" >&2
-    exit 1
-}
-
-require_command() {
-    command -v "$1" >/dev/null 2>&1 || die "找不到命令: $1"
-}
+die() { gpu_die benchmark "$@"; }
+require_command() { gpu_require_command benchmark "$1"; }
 
 normalize_path() {
     python3 - "$1" <<'PY'
@@ -41,8 +36,8 @@ print(Path(sys.argv[1]).expanduser().resolve(strict=False))
 PY
 }
 
-positive_int() { [[ $1 =~ ^[1-9][0-9]*$ ]]; }
-nonnegative_int() { [[ $1 =~ ^[0-9]+$ ]]; }
+positive_int() { gpu_positive_integer "$1"; }
+nonnegative_int() { gpu_nonnegative_integer "$1"; }
 
 parse_shape() {
     [[ $1 =~ ^([1-9][0-9]*)x([1-9][0-9]*)$ ]] || die "shape 必须为 NxD: $1"

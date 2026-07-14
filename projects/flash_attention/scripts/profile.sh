@@ -3,14 +3,14 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../../.." && pwd)"
+source "$repo_root/common/scripts/common.sh"
 runner="${FA_RUNNER:-$repo_root/build/projects/flash_attention/flash_attention_runner}"
 
 usage() {
     printf '用法: %s <tiled|tiled-async> [N D causal]\n' "${0##*/}" >&2
 }
 
-die() { printf 'profile: %s\n' "$*" >&2; exit 1; }
-positive_int() { [[ $1 =~ ^[1-9][0-9]*$ ]]; }
+die() { gpu_die profile "$@"; }
 
 [[ $# == 1 || $# == 4 ]] || { usage; exit 2; }
 kernel="$1"
@@ -22,10 +22,10 @@ esac
 n="${2:-1024}"
 d="${3:-128}"
 causal="${4:-0}"
-positive_int "$n" || die 'N 必须为正整数'
-positive_int "$d" || die 'D 必须为正整数'
+gpu_positive_integer "$n" || die 'N 必须为正整数'
+gpu_positive_integer "$d" || die 'D 必须为正整数'
 [[ $causal == 0 || $causal == 1 ]] || die 'causal 必须为 0 或 1'
-command -v ncu >/dev/null || die '找不到 ncu'
+gpu_require_command profile ncu
 [[ -x "$runner" ]] || die "runner 不可执行: $runner"
 
 shape="${n}x${d}-causal${causal}"

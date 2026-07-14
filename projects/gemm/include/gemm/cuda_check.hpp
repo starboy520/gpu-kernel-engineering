@@ -1,13 +1,15 @@
 #pragma once
 
+#include "gpu_kernel/cuda_check.hpp"
+
 #include <cublas_v2.h>
-#include <cuda_runtime_api.h>
 
 #include <sstream>
 #include <stdexcept>
-#include <string>
 
 namespace gemm {
+
+using gpu_kernel::throw_cuda_error;
 
 inline const char* cublas_status_name(cublasStatus_t status) {
     switch (status) {
@@ -36,14 +38,6 @@ inline const char* cublas_status_name(cublasStatus_t status) {
     }
 }
 
-[[noreturn]] inline void throw_cuda_error(cudaError_t status, const char* expression,
-                                          const char* file, int line) {
-    std::ostringstream message;
-    message << expression << " failed at " << file << ':' << line << " with "
-            << cudaGetErrorName(status) << ": " << cudaGetErrorString(status);
-    throw std::runtime_error(message.str());
-}
-
 [[noreturn]] inline void throw_cublas_error(cublasStatus_t status,
                                             const char* expression,
                                             const char* file, int line) {
@@ -55,20 +49,14 @@ inline const char* cublas_status_name(cublasStatus_t status) {
 
 }  // namespace gemm
 
-#define CUDA_CHECK(expr)                                                      \
-    do {                                                                      \
-        const cudaError_t cuda_check_status__ = (expr);                       \
-        if (cuda_check_status__ != cudaSuccess) {                             \
-            ::gemm::throw_cuda_error(cuda_check_status__, #expr, __FILE__,    \
-                                     __LINE__);                               \
-        }                                                                     \
-    } while (false)
+#define CUDA_CHECK(expr) GPU_CUDA_CHECK(expr)
 
 #define CUBLAS_CHECK(expr)                                                    \
     do {                                                                      \
-        const cublasStatus_t cublas_check_status__ = (expr);                  \
-        if (cublas_check_status__ != CUBLAS_STATUS_SUCCESS) {                 \
-            ::gemm::throw_cublas_error(cublas_check_status__, #expr, __FILE__,\
+        const cublasStatus_t cublas_check_status_value = (expr);              \
+        if (cublas_check_status_value != CUBLAS_STATUS_SUCCESS) {             \
+            ::gemm::throw_cublas_error(cublas_check_status_value, #expr,      \
+                                       __FILE__,                              \
                                        __LINE__);                             \
         }                                                                     \
     } while (false)

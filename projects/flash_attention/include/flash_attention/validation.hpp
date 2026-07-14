@@ -1,20 +1,11 @@
 #pragma once
 
-#include <cstddef>
+#include "gpu_kernel/validation.hpp"
 
 namespace flash_attention {
 
-struct ErrorMetrics {
-    double max_abs;
-    double max_rel;
-    std::size_t worst_index;
-    float expected;
-    float actual;
-    bool finite;
-};
-
-ErrorMetrics compare(const float *expected, const float *actual,
-                     std::size_t count);
-bool passes(const ErrorMetrics &metrics, double atol, double rtol);
+using gpu_kernel::ErrorMetrics;
+using gpu_kernel::compare;
+using gpu_kernel::passes;
 
 } // namespace flash_attention

@@ -13,5 +13,6 @@ endif()
 
 include(CTest)
 
+add_subdirectory(common)
 add_subdirectory(projects/gemm)
 add_subdirectory(projects/flash_attention)

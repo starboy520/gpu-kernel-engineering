@@ -15,6 +15,7 @@ target_include_directories(gemm_kernels
 
 target_link_libraries(gemm_kernels
     PUBLIC
+        gpu_kernel_headers
         CUDA::cudart
 )
 
@@ -26,7 +27,6 @@ target_compile_options(gemm_kernels
 
 add_library(gemm_common STATIC
     common/reference.cpp
-    common/validation.cpp
 )
 
 target_include_directories(gemm_common
@@ -36,6 +36,7 @@ target_include_directories(gemm_common
 
 target_link_libraries(gemm_common
     PUBLIC
+    gpu_kernel_common
         CUDA::cudart
 )
 
@@ -55,6 +56,7 @@ target_include_directories(gemm_vendor_baseline
 
 target_link_libraries(gemm_vendor_baseline
     PUBLIC
+        gpu_kernel_headers
         CUDA::cublas
         CUDA::cudart
 )

@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../../.." && pwd)"
+source "$repo_root/common/scripts/common.sh"
 runner="${GEMM_RUNNER:-$repo_root/build/projects/gemm/gemm_runner}"
 
 usage() {
@@ -10,14 +11,7 @@ usage() {
     printf 'kernel: naive | shared | register | vectorized | async-16b\n' >&2
 }
 
-die() {
-    printf 'profile: %s\n' "$*" >&2
-    exit 1
-}
-
-positive_integer() {
-    [[ $1 =~ ^[1-9][0-9]*$ ]]
-}
+die() { gpu_die profile "$@"; }
 
 [[ $# == 1 || $# == 4 ]] || {
     usage
@@ -37,11 +31,11 @@ esac
 m="${2:-2048}"
 n="${3:-2048}"
 k="${4:-2048}"
-positive_integer "$m" || die "M 必须是正整数，当前值: $m"
-positive_integer "$n" || die "N 必须是正整数，当前值: $n"
-positive_integer "$k" || die "K 必须是正整数，当前值: $k"
+gpu_positive_integer "$m" || die "M 必须是正整数，当前值: $m"
+gpu_positive_integer "$n" || die "N 必须是正整数，当前值: $n"
+gpu_positive_integer "$k" || die "K 必须是正整数，当前值: $k"
 
-command -v ncu >/dev/null 2>&1 || die '找不到 ncu'
+gpu_require_command profile ncu
 [[ -x "$runner" ]] || die "runner 不存在或不可执行: $runner"
 
 shape="${m}x${n}x${k}"

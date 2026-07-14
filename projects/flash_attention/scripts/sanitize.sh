@@ -3,25 +3,14 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../../.." && pwd)"
+# shellcheck source=../../../common/scripts/common.sh
+source "$repo_root/common/scripts/common.sh"
 
 usage() {
     printf '用法: %s quick|full [runner]\n' "${0##*/}" >&2
 }
 
-die() {
-    printf 'sanitize: %s\n' "$*" >&2
-    exit 1
-}
-
-has_token() {
-    local text="$1"
-    local token="$2"
-    local word
-    for word in $text; do
-        [[ $word == "$token" ]] && return 0
-    done
-    return 1
-}
+die() { gpu_die sanitize "$@"; }
 
 [[ $# -ge 1 && $# -le 2 ]] || {
     usage
@@ -35,7 +24,7 @@ mode="$1"
 
 runner="${2:-$repo_root/build/projects/flash_attention/flash_attention_runner}"
 [[ -x "$runner" ]] || die "runner 不存在或不可执行: $runner"
-command -v compute-sanitizer >/dev/null 2>&1 || die '找不到 compute-sanitizer'
+gpu_require_command sanitize compute-sanitizer
 
 command_count=0
 
@@ -65,10 +54,10 @@ run_sanitizer() {
     ((command_count += 1))
 
     ((exit_code == 0)) || die "sanitizer 失败: tool=$tool exit=$exit_code"
-    has_token "$output" "kernel=$kernel" || die "输出缺少 kernel=$kernel"
-    has_token "$output" "path=$expected_path" || \
+    gpu_has_token "$output" "kernel=$kernel" || die "输出缺少 kernel=$kernel"
+    gpu_has_token "$output" "path=$expected_path" || \
         die "输出缺少 path=$expected_path"
-    has_token "$output" 'status=PASS' || die '输出缺少 status=PASS'
+    gpu_has_token "$output" 'status=PASS' || die '输出缺少 status=PASS'
 }
 
 run_sanitizer memcheck naive 37 24 1 random tail-causal

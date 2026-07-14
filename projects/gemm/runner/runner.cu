@@ -4,8 +4,8 @@
 #include "gemm/kernel.hpp"
 #include "gemm/reference.hpp"
 #include "gemm/validation.hpp"
+#include "gpu_kernel/runner_utils.hpp"
 
-#include <charconv>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -16,7 +16,6 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
-#include <system_error>
 
 namespace gemm {
 namespace {
@@ -365,30 +364,6 @@ double run_benchmark_phase(const RunnerOptions& options, const KernelDescriptor&
     return static_cast<double>(total_ms) / static_cast<double>(options.iterations);
 }
 
-std::string require_value(int argc, const char* const argv[], int& index,
-                          const std::string& option) {
-    if (index + 1 >= argc) {
-        throw std::invalid_argument("missing value for " + option);
-    }
-    ++index;
-    return argv[index];
-}
-
-template <typename Integer>
-Integer parse_integer(const std::string& text, const std::string& option) {
-    Integer value{};
-    const char* begin = text.data();
-    const char* end = begin + text.size();
-    const auto result = std::from_chars(begin, end, value);
-    if (result.ec == std::errc::result_out_of_range) {
-        throw std::invalid_argument("integer overflow for " + option + ": " + text);
-    }
-    if (result.ec != std::errc{} || result.ptr != end) {
-        throw std::invalid_argument("invalid integer for " + option + ": " + text);
-    }
-    return value;
-}
-
 }  // namespace
 
 RunnerOptions parse_arguments(int argc, const char* const argv[]) {
@@ -400,15 +375,19 @@ RunnerOptions parse_arguments(int argc, const char* const argv[]) {
         } else if (option == "--list") {
             options.list = true;
         } else if (option == "--kernel") {
-            options.kernel = require_value(argc, argv, index, option);
+            options.kernel = gpu_kernel::require_value(argc, argv, index, option);
         } else if (option == "--m") {
-            options.problem.m = parse_integer<int>(require_value(argc, argv, index, option), option);
+            options.problem.m = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--n") {
-            options.problem.n = parse_integer<int>(require_value(argc, argv, index, option), option);
+            options.problem.n = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--k") {
-            options.problem.k = parse_integer<int>(require_value(argc, argv, index, option), option);
+            options.problem.k = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--mode") {
-            const std::string value = require_value(argc, argv, index, option);
+            const std::string value =
+                gpu_kernel::require_value(argc, argv, index, option);
             if (value == "validate") {
                 options.mode = RunMode::validate;
             } else if (value == "benchmark") {
@@ -418,14 +397,17 @@ RunnerOptions parse_arguments(int argc, const char* const argv[]) {
                     "invalid mode: " + value + " (expected validate or benchmark)");
             }
         } else if (option == "--warmup") {
-            options.warmup = parse_integer<int>(require_value(argc, argv, index, option), option);
+            options.warmup = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--iterations") {
-            options.iterations = parse_integer<int>(require_value(argc, argv, index, option), option);
+            options.iterations = gpu_kernel::parse_integer<int>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--seed") {
-            options.seed = parse_integer<std::uint32_t>(
-                require_value(argc, argv, index, option), option);
+            options.seed = gpu_kernel::parse_integer<std::uint32_t>(
+                gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--csv") {
-            options.csv_path = require_value(argc, argv, index, option);
+            options.csv_path =
+                gpu_kernel::require_value(argc, argv, index, option);
         } else {
             throw std::invalid_argument("unknown option: " + option);
         }
@@ -459,11 +441,7 @@ void validate_options(const RunnerOptions& options) {
 
 std::size_t checked_multiply(std::size_t left, std::size_t right,
                              std::string_view description) {
-    if (left != 0 && right > std::numeric_limits<std::size_t>::max() / left) {
-        throw std::overflow_error("size overflow while computing " +
-                                  std::string(description));
-    }
-    return left * right;
+    return gpu_kernel::checked_multiply(left, right, description);
 }
 
 std::vector<float> generate_input(std::size_t count, std::uint32_t seed) {

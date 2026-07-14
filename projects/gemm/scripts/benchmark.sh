@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../../.." && pwd)"
+source "$repo_root/common/scripts/common.sh"
 runner="${1:-$repo_root/build/projects/gemm/gemm_runner}"
 render_script="$repo_root/projects/gemm/scripts/render_results.py"
 canonical_csv="${GEMM_OUTPUT_CSV:-$repo_root/projects/gemm/results/raw/a100-fp32.csv}"
@@ -16,25 +17,19 @@ default_iterations=50
 default_repeats=3
 seed=1234
 
-die() {
-    printf 'benchmark: %s\n' "$*" >&2
-    exit 1
-}
-
-require_command() {
-    command -v "$1" >/dev/null 2>&1 || die "找不到命令: $1"
-}
+die() { gpu_die benchmark "$@"; }
+require_command() { gpu_require_command benchmark "$1"; }
 
 parse_positive_int() {
     local value="$1"
     local name="$2"
-    [[ $value =~ ^[1-9][0-9]*$ ]] || die "$name 必须是正整数，当前值: $value"
+    gpu_positive_integer "$value" || die "$name 必须是正整数，当前值: $value"
 }
 
 parse_nonnegative_int() {
     local value="$1"
     local name="$2"
-    [[ $value =~ ^[0-9]+$ ]] || die "$name 必须是非负整数，当前值: $value"
+    gpu_nonnegative_integer "$value" || die "$name 必须是非负整数，当前值: $value"
 }
 
 shape_is_official() {

@@ -1,13 +1,13 @@
-#include "flash_attention/validation.hpp"
+#include "gpu_kernel/validation.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
 
-namespace flash_attention {
+namespace gpu_kernel {
 
-ErrorMetrics compare(const float* expected, const float* actual,
+ErrorMetrics compare(const float *expected, const float *actual,
                      std::size_t count) {
     if (expected == nullptr || actual == nullptr) {
         throw std::invalid_argument("compare requires non-null inputs");
@@ -45,7 +45,7 @@ ErrorMetrics compare(const float* expected, const float* actual,
     return metrics;
 }
 
-bool passes(const ErrorMetrics& metrics, double atol, double rtol) {
+bool passes(const ErrorMetrics &metrics, double atol, double rtol) {
     if (atol < 0.0 || rtol < 0.0) {
         throw std::invalid_argument("passes requires non-negative tolerances");
     }
@@ -53,4 +53,4 @@ bool passes(const ErrorMetrics& metrics, double atol, double rtol) {
            (metrics.max_abs <= atol || metrics.max_rel <= rtol);
 }
 
-}  // namespace flash_attention
+} // namespace gpu_kernel
