@@ -1,5 +1,5 @@
-#include "flash_attention/cuda_check.hpp"
 #include "flash_attention/kernel.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 
 #include <cstdint>
 
@@ -182,6 +182,6 @@ flash_attention::LaunchResult flash_attention::launch_tiled_async(
 
     tiled_async_attention_kernel<<<problem.n, 128, 0, stream>>>(
         q, k, v, output, problem.n, problem.d, problem.causal);
-    FA_CUDA_CHECK(cudaGetLastError());
+    GPU_CUDA_CHECK(cudaGetLastError());
     return {"fast-pipeline-16b", false};
 }

@@ -1,8 +1,8 @@
 #include "flash_attention/runner.hpp"
 
-#include "flash_attention/cuda_check.hpp"
 #include "flash_attention/reference.hpp"
 #include "flash_attention/validation.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 #include "gpu_kernel/runner_utils.hpp"
 
 #include <algorithm>
@@ -26,7 +26,7 @@ class DeviceBuffer {
   public:
     explicit DeviceBuffer(std::size_t bytes) : pointer_(nullptr) {
         if (bytes != 0) {
-            FA_CUDA_CHECK(cudaMalloc(&pointer_, bytes));
+            GPU_CUDA_CHECK(cudaMalloc(&pointer_, bytes));
         }
     }
 
@@ -47,7 +47,9 @@ class DeviceBuffer {
 
 class EventHandle {
   public:
-    EventHandle() : event_(nullptr) { FA_CUDA_CHECK(cudaEventCreate(&event_)); }
+    EventHandle() : event_(nullptr) {
+        GPU_CUDA_CHECK(cudaEventCreate(&event_));
+    }
 
     ~EventHandle() {
         if (event_ != nullptr) {
@@ -177,7 +179,8 @@ RunnerOptions parse_arguments(int argc, const char *const argv[]) {
         } else if (option == "--list") {
             options.list = true;
         } else if (option == "--kernel") {
-            options.kernel = gpu_kernel::require_value(argc, argv, index, option);
+            options.kernel =
+                gpu_kernel::require_value(argc, argv, index, option);
         } else if (option == "--n") {
             options.problem.n = gpu_kernel::parse_integer<int>(
                 gpu_kernel::require_value(argc, argv, index, option), option);
@@ -301,27 +304,27 @@ int run(const RunnerOptions &options, std::ostream &output) {
     DeviceBuffer device_output(bytes);
     DeviceBuffer device_workspace(workspace_bytes);
 
-    FA_CUDA_CHECK(cudaMemcpy(device_q.data(), host_q.data(), bytes,
-                             cudaMemcpyHostToDevice));
-    FA_CUDA_CHECK(cudaMemcpy(device_k.data(), host_k.data(), bytes,
-                             cudaMemcpyHostToDevice));
-    FA_CUDA_CHECK(cudaMemcpy(device_v.data(), host_v.data(), bytes,
-                             cudaMemcpyHostToDevice));
+    GPU_CUDA_CHECK(cudaMemcpy(device_q.data(), host_q.data(), bytes,
+                              cudaMemcpyHostToDevice));
+    GPU_CUDA_CHECK(cudaMemcpy(device_k.data(), host_k.data(), bytes,
+                              cudaMemcpyHostToDevice));
+    GPU_CUDA_CHECK(cudaMemcpy(device_v.data(), host_v.data(), bytes,
+                              cudaMemcpyHostToDevice));
     // 0xFF is a NaN bit pattern for float. An unimplemented or incomplete
     // kernel therefore fails validation instead of accidentally passing.
-    FA_CUDA_CHECK(cudaMemset(device_output.data(), 0xFF, bytes));
+    GPU_CUDA_CHECK(cudaMemset(device_output.data(), 0xFF, bytes));
     if (workspace_bytes != 0) {
-        FA_CUDA_CHECK(
+        GPU_CUDA_CHECK(
             cudaMemset(device_workspace.data(), 0xFF, workspace_bytes));
     }
 
     const LaunchResult validation_launch = kernel->launch(
         device_q.data(), device_k.data(), device_v.data(), device_output.data(),
         device_workspace.data(), options.problem, nullptr);
-    FA_CUDA_CHECK(cudaPeekAtLastError());
-    FA_CUDA_CHECK(cudaDeviceSynchronize());
-    FA_CUDA_CHECK(cudaMemcpy(actual.data(), device_output.data(), bytes,
-                             cudaMemcpyDeviceToHost));
+    GPU_CUDA_CHECK(cudaPeekAtLastError());
+    GPU_CUDA_CHECK(cudaDeviceSynchronize());
+    GPU_CUDA_CHECK(cudaMemcpy(actual.data(), device_output.data(), bytes,
+                              cudaMemcpyDeviceToHost));
 
     const ErrorMetrics metrics = compare(expected.data(), actual.data(), count);
     const bool passed = passes(metrics, kValidationAtol, kValidationRtol);
@@ -338,20 +341,20 @@ int run(const RunnerOptions &options, std::ostream &output) {
                              device_output.data(), device_workspace.data(),
                              options.problem, nullptr);
     }
-    FA_CUDA_CHECK(cudaDeviceSynchronize());
+    GPU_CUDA_CHECK(cudaDeviceSynchronize());
 
     EventHandle start;
     EventHandle stop;
-    FA_CUDA_CHECK(cudaEventRecord(start.get()));
+    GPU_CUDA_CHECK(cudaEventRecord(start.get()));
     for (int iteration = 0; iteration < options.iterations; ++iteration) {
         (void)kernel->launch(device_q.data(), device_k.data(), device_v.data(),
                              device_output.data(), device_workspace.data(),
                              options.problem, nullptr);
     }
-    FA_CUDA_CHECK(cudaEventRecord(stop.get()));
-    FA_CUDA_CHECK(cudaEventSynchronize(stop.get()));
+    GPU_CUDA_CHECK(cudaEventRecord(stop.get()));
+    GPU_CUDA_CHECK(cudaEventSynchronize(stop.get()));
     float total_ms = 0.0F;
-    FA_CUDA_CHECK(cudaEventElapsedTime(&total_ms, start.get(), stop.get()));
+    GPU_CUDA_CHECK(cudaEventElapsedTime(&total_ms, start.get(), stop.get()));
     const double latency_ms =
         static_cast<double>(total_ms) / options.iterations;
     print_result(output, *kernel, path, options.problem, true, metrics,

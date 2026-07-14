@@ -1,5 +1,5 @@
-#include "gemm/cuda_check.hpp"
 #include "gemm/kernel.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 
 #include <cstdint>
 
@@ -39,8 +39,8 @@ __global__ void vectorized_tiled_kernel(const float *a, const float *b,
             int g_row = global_start_row + tile_row;
             int g_col = step + tile_col;
             if (g_row < m && g_col + 3 < k) {
-                const float4 v_a = reinterpret_cast<const float4 *>(
-                    a + g_row * k + g_col)[0];
+                const float4 v_a =
+                    reinterpret_cast<const float4 *>(a + g_row * k + g_col)[0];
                 s_a[tile_row][tile_col] = v_a.x;
                 s_a[tile_row][tile_col + 1] = v_a.y;
                 s_a[tile_row][tile_col + 2] = v_a.z;
@@ -58,8 +58,8 @@ __global__ void vectorized_tiled_kernel(const float *a, const float *b,
             int g_row = step + tile_row;
             int g_col = global_start_col + tile_col;
             if (g_row < k && g_col + 3 < n) {
-                const float4 v_b = reinterpret_cast<const float4 *>(
-                    b + g_row * n + g_col)[0];
+                const float4 v_b =
+                    reinterpret_cast<const float4 *>(b + g_row * n + g_col)[0];
                 s_b[tile_row][tile_col] = v_b.x;
                 s_b[tile_row][tile_col + 1] = v_b.y;
                 s_b[tile_row][tile_col + 2] = v_b.z;
@@ -127,7 +127,7 @@ gemm::LaunchResult gemm::launch_vectorized_tiled(const float *a, const float *b,
     } else {
         vectorized_tiled_kernel<<<grid, block, 0, stream>>>(
             a, b, c, problem.m, problem.n, problem.k);
-        CUDA_CHECK(cudaGetLastError());
+        GPU_CUDA_CHECK(cudaGetLastError());
 
         return {"fast-float4", false};
     }

@@ -1,5 +1,5 @@
-#include "gemm/cuda_check.hpp"
 #include "gemm/kernel.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 
 constexpr int BM = 64;
 constexpr int BN = 64;
@@ -95,7 +95,7 @@ gemm::LaunchResult gemm::launch_register_tiled(const float *a, const float *b,
     dim3 grid((BN + problem.n - 1) / BN, (BM + problem.m - 1) / BM);
     register_tiled_kernel<<<grid, block, 0, stream>>>(a, b, c, problem.m,
                                                       problem.n, problem.k);
-    CUDA_CHECK(cudaGetLastError());
+    GPU_CUDA_CHECK(cudaGetLastError());
 
     return {"register", false};
 }

@@ -1,6 +1,6 @@
 #include "flash_attention/common.cuh"
-#include "flash_attention/cuda_check.hpp"
 #include "flash_attention/kernel.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 
 namespace {
 
@@ -186,6 +186,6 @@ flash_attention::LaunchResult flash_attention::launch_tiled_parallel(
 
     tiled_parallel_attention_kernel<<<grid, 128, 0, stream>>>(
         q, k, v, output, problem.n, problem.d, problem.causal);
-    FA_CUDA_CHECK(cudaGetLastError());
+    GPU_CUDA_CHECK(cudaGetLastError());
     return {"tiled-parallel", false};
 }

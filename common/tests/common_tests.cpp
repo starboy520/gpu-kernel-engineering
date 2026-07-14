@@ -1,5 +1,5 @@
-#include "gpu_kernel/validation.hpp"
 #include "gpu_kernel/runner_utils.hpp"
+#include "gpu_kernel/validation.hpp"
 
 #include <cmath>
 #include <iostream>

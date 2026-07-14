@@ -1,5 +1,5 @@
-#include "gemm/cuda_check.hpp"
 #include "gemm/kernel.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 #include <cstdint>
 
 #include <cooperative_groups.h>
@@ -38,10 +38,9 @@ __device__ void load_async_16b(float *s_mem, int smem_ld, const float *src,
         int g_row = row_base + tile_row;
         int g_col = col_base + tile_col;
         if (g_row < bound_row && g_col + 3 < bound_col) {
-            cuda::memcpy_async(
-                &s_mem[tile_row * smem_ld + tile_col],
-                &src[g_row * ld + g_col],
-                cuda::aligned_size_t<16>(sizeof(float4)), pipe);
+            cuda::memcpy_async(&s_mem[tile_row * smem_ld + tile_col],
+                               &src[g_row * ld + g_col],
+                               cuda::aligned_size_t<16>(sizeof(float4)), pipe);
         } else {
             for (int offset = 0; offset < 4; ++offset) {
                 s_mem[tile_row * smem_ld + tile_col + offset] = 0.0f;
@@ -157,7 +156,7 @@ gemm::LaunchResult gemm::launch_double_buffer(const float *a, const float *b,
     } else {
         double_buffer_kernel<<<grid, block, 0, stream>>>(a, b, c, problem.m,
                                                          problem.n, problem.k);
-        CUDA_CHECK(cudaGetLastError());
+        GPU_CUDA_CHECK(cudaGetLastError());
 
         return {"fast-pipeline-16b", false};
     }

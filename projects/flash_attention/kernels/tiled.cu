@@ -1,5 +1,5 @@
-#include "flash_attention/cuda_check.hpp"
 #include "flash_attention/kernel.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 
 namespace {
 
@@ -101,14 +101,16 @@ tiled_attention_kernel(const float *q, const float *k, const float *v,
         //   1. 上面先保存原始 logit：Q[query] 与 K[start + i] 的点积；
         //   2. 下面再原地改写为未归一化权重 exp(logit - m_new)。
         // 原始 logit 在算出当前 tile 的最大值后便不再需要，因此复用同一块
-        // shared memory；本 tile 更新完 acc 后，下一个 tile 会重新覆盖 score[]。
+        // shared memory；本 tile 更新完 acc 后，下一个 tile 会重新覆盖
+        // score[]。
         //
         // acc[feature] 不是“某个 key 的累加值”，而是当前 query 在已经处理过的
         // 所有 key 上，对 V[:, feature] 的未归一化加权和（softmax 分子）：
         //   acc_new[x] = alpha * acc_old[x]
         //              + sum_i(score[i] * V[start + i, x])
         // 其中 alpha = exp(m_old - m_new)，用于把旧分子缩放到新的全局最大值
-        // m_new 所对应的指数基准；l 以相同方式更新，最后 output[x] = acc[x] / l。
+        // m_new 所对应的指数基准；l 以相同方式更新，最后 output[x] = acc[x] /
+        // l。
         if (threadIdx.x == 0) {
             float cur_max = -INFINITY;
             for (int i = 0; i < valid; i++) {
@@ -166,6 +168,6 @@ flash_attention::LaunchResult flash_attention::launch_tiled_online(
 
     tiled_attention_kernel<<<grid, 128, 0, stream>>>(q, k, v, output, problem.n,
                                                      problem.d, problem.causal);
-    FA_CUDA_CHECK(cudaGetLastError());
+    GPU_CUDA_CHECK(cudaGetLastError());
     return {"tiled", false};
 }

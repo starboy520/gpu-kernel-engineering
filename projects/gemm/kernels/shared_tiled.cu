@@ -1,5 +1,5 @@
-#include "gemm/cuda_check.hpp"
 #include "gemm/kernel.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 
 constexpr int TILE_SIZE = 32;
 __global__ void shared_tiled_kernel(const float *a, const float *b, float *c,
@@ -51,7 +51,7 @@ gemm::LaunchResult gemm::launch_shared_tiled(const float *a, const float *b,
               (block.y + problem.m - 1) / block.y);
     shared_tiled_kernel<<<grid, block, 0, stream>>>(a, b, c, problem.m,
                                                     problem.n, problem.k);
-    CUDA_CHECK(cudaGetLastError());
+    GPU_CUDA_CHECK(cudaGetLastError());
 
     return {"shared", false};
 }

@@ -23,6 +23,6 @@ namespace gpu_kernel {
         const cudaError_t gpu_cuda_status_value = (expr);                      \
         if (gpu_cuda_status_value != cudaSuccess) {                            \
             ::gpu_kernel::throw_cuda_error(gpu_cuda_status_value, #expr,       \
-                                           __FILE__, __LINE__);                 \
+                                           __FILE__, __LINE__);                \
         }                                                                      \
     } while (false)

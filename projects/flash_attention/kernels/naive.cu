@@ -1,6 +1,6 @@
 #include "flash_attention/common.cuh"
-#include "flash_attention/cuda_check.hpp"
 #include "flash_attention/kernel.hpp"
+#include "gpu_kernel/cuda_check.hpp"
 
 // Student-owned file: implement the three kernels and their launch geometry.
 // The runner supplies Q/K/V/output plus an N*N scores workspace.
@@ -88,13 +88,13 @@ flash_attention::LaunchResult flash_attention::launch_naive_materialized(
               (block.y + problem.n - 1) / block.y);
     qk_scores<<<grid, block, 0, stream>>>(q, k, scores, problem.n, problem.d,
                                           problem.causal);
-    FA_CUDA_CHECK(cudaGetLastError());
+    GPU_CUDA_CHECK(cudaGetLastError());
     row_softmax<<<problem.n, 32, 0, stream>>>(scores, problem.n);
-    FA_CUDA_CHECK(cudaGetLastError());
+    GPU_CUDA_CHECK(cudaGetLastError());
     dim3 grid2((block.x + problem.d - 1) / block.x,
                (block.y + problem.n - 1) / block.y);
     pv_output<<<grid2, block, 0, stream>>>(scores, v, output, problem.n,
                                            problem.d);
-    FA_CUDA_CHECK(cudaGetLastError());
+    GPU_CUDA_CHECK(cudaGetLastError());
     return {"naive", false};
 }
