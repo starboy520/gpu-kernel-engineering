@@ -189,7 +189,7 @@ projects/flash_attention/scripts/extract_sass.sh tiled-async
 
 ## 下一步
 
-Naive、Online Tiled、并行归约、`cp.async` 双缓冲、canonical benchmark、ncu 与 SASS 证据均已收口。后续扩展不进入当前作品主线；可选方向包括多 query/block、Tensor Core、FP16/BF16 或独立 Decode/PagedAttention 项目。
+Naive、Online Tiled、并行归约、`cp.async` 双缓冲、canonical benchmark、ncu 与 SASS 证据均已收口。后续学习按仓库级 [Attention Lab 里程碑路线图](../../ATTENTION_ROADMAP.md)推进：先完成 Query-tiled、低精度、Tensor Core、FA2-style Mapping 与 Backward，再进入独立 Decode、Split-KV、PagedAttention 和 Continuous Batching。
 
 `BC=32` 不作为当前主线；仅当后续证据表明 tile 宽度是必要变量时再单独评估。
 

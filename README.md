@@ -76,4 +76,5 @@ projects/gemm/scripts/extract_sass.sh async-16b
 ## Roadmap
 
 - FlashAttention：Naive、Online Tiled、Warp 并行归约、`cp.async`、canonical benchmark、ncu 与 SASS 证据已完成。
+- Attention Lab：[里程碑路线图](ATTENTION_ROADMAP.md)按证据门槛继续 Advanced Prefill，再进入 Decode、Split-KV、PagedAttention 与 Continuous Batching。
 - CUDA 常用算子：计划中，尚未实现。
