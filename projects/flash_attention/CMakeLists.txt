@@ -27,6 +27,11 @@ add_library(flash_attention_kernels STATIC
     kernels/tiled_async.cu
 )
 
+set(flash_attention_kernel_cuda_options
+    "-O3;-lineinfo;-Xptxas=-warn-spills;-Xcompiler=-Wall,-Wextra")
+set_property(TARGET flash_attention_kernels PROPERTY
+    GPU_KERNEL_EVIDENCE_CUDA_OPTIONS "${flash_attention_kernel_cuda_options}")
+
 target_include_directories(flash_attention_kernels
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -40,7 +45,7 @@ target_link_libraries(flash_attention_kernels
 
 target_compile_options(flash_attention_kernels
     PRIVATE
-        $<$<COMPILE_LANGUAGE:CUDA>:-O3;-lineinfo;-Xptxas=-warn-spills;-Xcompiler=-Wall,-Wextra>
+    $<$<COMPILE_LANGUAGE:CUDA>:${flash_attention_kernel_cuda_options}>
 )
 
 add_library(flash_attention_runner_support STATIC

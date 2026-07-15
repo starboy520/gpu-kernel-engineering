@@ -26,6 +26,16 @@ build/projects/attention_prefill/attention_prefill_runner \
 projects/attention_prefill/tests/test_query_tiled.sh
 
 projects/attention_prefill/scripts/sanitize.sh full
+
+# 非 canonical 的最小 evidence smoke
+AP_M1_SHAPES=128x64 AP_M1_CAUSAL=0 \
+AP_M1_WARMUP=0 AP_M1_ITERATIONS=1 AP_M1_REPEATS=1 \
+AP_M1_ALLOW_DIRTY=1 \
+projects/attention_prefill/scripts/benchmark_m1.sh
 ```
 
-当前 M1 状态：correctness 与 safety 已完成；下一步采集 CUDA Event benchmark、Nsight Compute 与 SASS 证据。在这些证据完成前不发布性能结论。
+Evidence runner 支持 `--metadata-only`，输出编译期 source fingerprint、带完整 payload hash 的 build contract，以及实际 CUDA device 的 index、UUID、名称 token、SM 和 driver version。Canonical benchmark 必须无位置参数运行，只接受非 symlink 的标准 runner 普通文件；smoke 才允许传入自定义 runner。脚本按确定性的 filesystem manifest 重算当前 source fingerprint，并独立解析、逐项验证 CMake 生成的 build attestation；正式协议固定为 `release-sm80-<hash>`、A100 80GB、SM 8.0。详细 provenance、威胁模型和 CSV 合同见 [results/README.md](results/README.md)。
+
+M1 profile 与 SASS 同样区分 canonical 和 smoke。标准 evidence runner、当前 source fingerprint、canonical build attestation、三组固定 canonical shape 与 official 输出目录全部匹配时，才会生成正式文件；自定义 runner、非 canonical shape 和 smoke override 必须写入路径名含 `smoke` 的独立目录。ncu 合同只支持 `2026.2.*`，其他版本一律 fail closed。
+
+当前 M1 状态：correctness 与 safety 已完成；已重新采集 `256x64 causal=0` 的真实 ncu Br1/Br4 pair 和统一 binary 的完整 SASS。该 ncu pair 是单点诊断，不替代 CUDA Event canonical benchmark；完整六点 profile 与正式 benchmark 尚未发布。

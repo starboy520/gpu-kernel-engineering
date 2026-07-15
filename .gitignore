@@ -55,3 +55,9 @@ __pycache__/
 /projects/flash_attention/results/generated/*.md
 /projects/flash_attention/results/profiles/
 /projects/flash_attention/results/sass/
+
+# Attention Prefill benchmark/profile reproduction outputs
+/projects/attention_prefill/results/raw/*.csv
+/projects/attention_prefill/results/generated/*.md
+/projects/attention_prefill/results/profiles/
+/projects/attention_prefill/results/sass/
