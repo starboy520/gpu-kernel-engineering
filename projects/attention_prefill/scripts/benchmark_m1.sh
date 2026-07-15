@@ -159,18 +159,6 @@ if [[ -n $(git -C "$repo_root" status --short) ]]; then
         die 'smoke benchmark 的工作树不干净；设置 AP_M1_ALLOW_DIRTY=1 才可继续'
 fi
 
-if (( official )); then
-    mapfile -t source_files < <(
-        python3 "$fingerprint_script" --repo-root "$repo_root" --print-files
-    )
-    (( ${#source_files[@]} > 0 )) || die '找不到用于 freshness 检查的 source'
-    for source_path in "${source_files[@]}"; do
-        if [[ $repo_root/$source_path -nt $runner ]]; then
-            die "runner 早于最新 source: $source_path"
-        fi
-    done
-fi
-
 expected_rows=$(( ${#shapes[@]} * ${#causal_modes[@]} * ${#implementations[@]} ))
 if (( official )); then
     [[ $expected_rows == 40 ]] || die "canonical 结果必须为 40 行，当前为 $expected_rows"

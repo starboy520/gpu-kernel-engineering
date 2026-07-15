@@ -36,7 +36,7 @@ reference：CPU double
 - CMake 对排序后的相对路径逐文件计算 SHA-256，再对 `relative-path:file-sha256` manifest 计算最终 SHA-256。`CONFIGURE_DEPENDS` glob 监视相关目录集合，新增或删除匹配文件会触发重新配置；
 - runner 编译时嵌入 `source_sha256`、`build_contract=release-sm80-<payload-hash-prefix>` 和完整 `build_contract_payload_sha256`。CMake 以固定字段顺序生成 schema 1 payload，字段为 `schema_version`、`build_type`、`cuda_architectures`、`cuda_compiler_id`、`cuda_compiler_version`、`cuda_compiler_realpath`、`cmake_cuda_flags`、`cmake_cuda_flags_release`，以及 evidence support、Attention Prefill kernel、FlashAttention kernels 三个 target 的 compile options；完整 payload 的原始 UTF-8 字节参与 SHA-256；
 - CMake 生成 `build/projects/attention_prefill/attention_prefill_build_attestation.txt`，文件同时保存完整 payload、完整 payload SHA-256 和短 hash build contract。Canonical benchmark 要求它是非 symlink 普通文件、mtime 不早于 runner，并由独立 Python parser 验证 schema 1、`build_type=Release`、arch 精确为 `80`、compiler ID 为 `NVIDIA`、compiler version/realpath 非空、通用 `CMAKE_CUDA_FLAGS` 为空、Release flags 的规范化 token set 精确为 `-O3` 与 `-DNDEBUG`、三个 target options 精确匹配项目固定定义；随后重算完整 payload SHA-256，并与 runner metadata 的完整 hash 和 contract 短 hash 对拍。Compiler version/path 只记录并要求非空，不固定具体版本；benchmark 仍逐 repeat 对拍 source/build/device metadata；
-- CSV 同时记录 runner binary SHA-256 与 source SHA-256。mtime freshness 可保留为辅助检查，但不能替代 fingerprint；
+- CSV 同时记录 runner binary SHA-256 与 source SHA-256。内容 fingerprint 是 source freshness 的权威；不使用会受 Git checkout/commit 时间影响的 mtime 作为 canonical 门槛；
 - `device_index`、`gpu_uuid`、`gpu_name`、`sm` 和 CUDA driver version 全部来自 runner 对实际 CUDA device 的查询。脚本不再用 `CUDA_VISIBLE_DEVICES` 推导 `nvidia-smi` index，也不以 `nvidia-smi` 的第一张卡代替真实执行设备；
 - canonical 要求 runner 实际报告的 `gpu_name` token 同时包含 `A100` 和 `80GB`，且 `sm=8.0`；A100 40GB 不满足正式协议。
 

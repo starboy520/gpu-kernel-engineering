@@ -326,15 +326,15 @@ class BenchmarkM1Tests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("必须命名为 smoke.csv", result.stderr)
 
-    def test_canonical_rejects_runner_older_than_tracked_sources(self):
-        old = time.time() - 100
-        os.utime(self.runner, (old, old))
+    def test_canonical_accepts_older_runner_mtime_when_content_identity_matches(self):
         source = self.repo / "projects/attention_prefill/include/api.hpp"
         new = time.time() + 100
         os.utime(source, (new, new))
-        result = self.run_benchmark(self.environment())
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("runner 早于最新 source", result.stderr)
+        self.source_sha256 = self._source_fingerprint()
+        result = self.run_benchmark(
+            self.environment(FAKE_SOURCE_SHA256=self.source_sha256)
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_canonical_rejects_custom_runner_path(self):
         custom_runner = self.repo / "build/custom/evidence_runner"
