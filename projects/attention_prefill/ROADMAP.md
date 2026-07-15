@@ -6,8 +6,8 @@
 
 ```text
 M1 Kernel correctness/safety  [完成]
-M1 benchmark/ncu/SASS         [下一步]
-M2 Warp-per-query             [未开始]
+M1 benchmark/ncu/SASS         [完成]
+M2 Warp-per-query             [下一步]
 M3 及以后                     [未开始]
 ```
 
@@ -42,13 +42,15 @@ M3 及以后                     [未开始]
 → 记录正收益、负收益与下一假设
 ```
 
-## M1 接下来具体做什么
+## M1 性能结论
 
-1. 固定 canonical benchmark shape 与计时协议。
-2. 对比冻结的 `Br=1` FP32 baseline 与当前 `Br=4` 实现。
-3. 用 ncu 检查 K/V 请求加载、L1/L2、barrier、long scoreboard、Shared Memory 和 occupancy。
-4. 用 SASS 确认当前仍是 FP32 SIMT 标量 FMA 路径。
-5. 证据归档后再进入 M2；不要现在就修改阶段 E 的线程映射。
+1. 理论 K/V requested elements 在所有 shape 均减少 4 倍。
+2. `N<=512` 时 Br4 因 CTA/waves/occupancy 不足而回退。
+3. `N>=1024` 时复用收益超过资源代价，全部 shape 获益。
+4. 最大收益为 `2048x64 causal=1` 的 `1.489x`。
+5. SASS 确认 FP32 `FFMA` 路径，无 `HMMA`、`LDGSTS` 和 local spill。
+
+下一步进入 M2 Warp-per-query，重点改善 Warp ownership、eligible warps、Shared Memory 与阶段 D/E 的线程利用率。
 
 一句话记忆：
 
