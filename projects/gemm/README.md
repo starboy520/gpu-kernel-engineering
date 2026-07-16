@@ -2,6 +2,8 @@
 
 **状态：已完成首版，可复现。**
 
+Tensor Core 是独立 v2 路线，不修改本页 FP32 结果。当前先执行 G0～G5，见 [Tensor Core GEMM Roadmap](TENSOR_CORE_ROADMAP.md)；完整边学边做教材保存在同级 `cuda_study` 仓库。
+
 在 NVIDIA A100（`sm_80`）上实现 row-major FP32 GEMM：`C = A × B`。项目关注 CUDA Core 上的优化过程，以及 correctness、wall-clock benchmark、ncu 和 SASS 之间能否互相印证。
 
 ## 正式结果：2048³

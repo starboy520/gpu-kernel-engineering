@@ -15,5 +15,6 @@ include(CTest)
 
 add_subdirectory(common)
 add_subdirectory(projects/gemm)
+add_subdirectory(projects/gemm_tensorcore)
 add_subdirectory(projects/flash_attention)
 add_subdirectory(projects/attention_prefill)

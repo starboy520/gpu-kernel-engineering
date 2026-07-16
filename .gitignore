@@ -61,3 +61,6 @@ __pycache__/
 /projects/attention_prefill/results/generated/*.md
 /projects/attention_prefill/results/profiles/
 /projects/attention_prefill/results/sass/
+
+# Tensor Core GEMM local disassembly output
+/projects/gemm_tensorcore/results/sass/
