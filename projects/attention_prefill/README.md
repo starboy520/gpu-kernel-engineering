@@ -39,3 +39,14 @@ Evidence runner 支持 `--metadata-only`，输出编译期 source fingerprint、
 M1 profile 与 SASS 同样区分 canonical 和 smoke。标准 evidence runner、当前 source fingerprint、canonical build attestation、三组固定 canonical shape 与 official 输出目录全部匹配时，才会生成正式文件；自定义 runner、非 canonical shape 和 smoke override 必须写入路径名含 `smoke` 的独立目录。ncu 合同只支持 `2026.2.*`，其他版本一律 fail closed。
 
 当前 M1 已完成 correctness、full sanitizer、40 行 CUDA Event canonical benchmark、六点 Nsight Compute 和 SASS 证据。Br4 在 `N<=512` 回退，在 `N>=1024` 全部获益；最大收益为 `2048x64 causal=1` 的 `1.489x`。完整结果见 [results/generated/a100-fp32-m1.md](results/generated/a100-fp32-m1.md)、[results/evidence/m1-ncu-summary.md](results/evidence/m1-ncu-summary.md)和[results/evidence/m1-sass.md](results/evidence/m1-sass.md)。下一阶段为 M2 Warp-per-query。
+
+M2 Warp-per-query Kernel 已完成 128-case correctness 和 representative full sanitizer。临时收口清单见 [M2_CHECKLIST.md](M2_CHECKLIST.md)，正式 clean-commit 证据发布后删除。M2 复用同一 CPU reference 和 correctness 协议：
+
+```bash
+build/projects/attention_prefill/attention_prefill_runner \
+    --implementation warp-per-query --n 1 --d 1 --causal 0
+
+projects/attention_prefill/tests/test_warp_per_query.sh
+```
+
+M1/M2 开发期 CUDA Event、ncu 与 SASS 结论见 [results/evidence/m2-development-summary.md](results/evidence/m2-development-summary.md)。当前主要收益集中在 non-causal `D=128`，当前主要待优化点是 causal 路径中的未来 Tile/Key 无效工作。

@@ -1,5 +1,6 @@
 #include "attention_prefill/evidence_runner.hpp"
 
+#include "attention_prefill/warp_per_query.hpp"
 #include "flash_attention/kernel.hpp"
 #include "gpu_kernel/cuda_check.hpp"
 #include "gpu_kernel/runner_utils.hpp"
@@ -67,7 +68,15 @@ class Event {
 };
 
 const char *implementation_name(Implementation implementation) {
-    return implementation == Implementation::br1 ? "br1" : "br4";
+    switch (implementation) {
+    case Implementation::br1:
+        return "br1";
+    case Implementation::br4:
+        return "br4";
+    case Implementation::m2:
+        return "m2";
+    }
+    throw std::logic_error("unknown evidence implementation");
 }
 
 std::string safe_token(const char *text) {
@@ -92,7 +101,11 @@ void launch(Implementation implementation, const float *q, const float *k,
                                                    baseline_problem, nullptr);
         return;
     }
-    launch_query_tiled(q, k, v, output, problem, nullptr);
+    if (implementation == Implementation::br4) {
+        launch_query_tiled(q, k, v, output, problem, nullptr);
+        return;
+    }
+    launch_warp_per_query(q, k, v, output, problem, nullptr);
 }
 
 std::vector<float> make_input(std::size_t count, std::uint32_t seed) {
@@ -167,9 +180,11 @@ Options parse_arguments(int argc, const char *const argv[]) {
                 options.implementation = Implementation::br1;
             else if (text == "br4")
                 options.implementation = Implementation::br4;
+            else if (text == "m2")
+                options.implementation = Implementation::m2;
             else
                 throw std::invalid_argument(
-                    "--implementation must be br1 or br4");
+                    "--implementation must be br1, br4, or m2");
         } else if (option == "--n")
             options.problem.n = gpu_kernel::parse_integer<int>(value(), option);
         else if (option == "--d")

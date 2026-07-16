@@ -1,4 +1,5 @@
 #include "attention_prefill/query_tiled.hpp"
+#include "attention_prefill/warp_per_query.hpp"
 #include "gpu_kernel/cuda_check.hpp"
 #include "gpu_kernel/runner_utils.hpp"
 #include "gpu_kernel/validation.hpp"
@@ -18,6 +19,7 @@
 namespace {
 
 enum class InputPattern { random, zero_qk, rising_logits };
+enum class Implementation { query_tiled, warp_per_query };
 
 class DeviceBuffer {
   public:
@@ -44,7 +46,29 @@ struct Options {
     attention_prefill::Problem problem{0, 0, false};
     std::uint32_t seed = 1234U;
     InputPattern input_pattern = InputPattern::random;
+    Implementation implementation = Implementation::query_tiled;
 };
+
+const char *implementation_name(Implementation implementation) {
+    switch (implementation) {
+    case Implementation::query_tiled:
+        return "query-tiled";
+    case Implementation::warp_per_query:
+        return "warp-per-query";
+    }
+    throw std::logic_error("unknown implementation");
+}
+
+Implementation parse_implementation(const std::string &value) {
+    if (value == "query-tiled") {
+        return Implementation::query_tiled;
+    }
+    if (value == "warp-per-query") {
+        return Implementation::warp_per_query;
+    }
+    throw std::invalid_argument(
+        "--implementation must be query-tiled or warp-per-query");
+}
 
 const char *input_pattern_name(InputPattern pattern) {
     switch (pattern) {
@@ -94,6 +118,9 @@ Options parse_arguments(int argc, const char *const argv[]) {
                 gpu_kernel::require_value(argc, argv, index, option), option);
         } else if (option == "--input-pattern") {
             options.input_pattern = parse_input_pattern(
+                gpu_kernel::require_value(argc, argv, index, option));
+        } else if (option == "--implementation") {
+            options.implementation = parse_implementation(
                 gpu_kernel::require_value(argc, argv, index, option));
         } else {
             throw std::invalid_argument("unknown option: " + option);
@@ -219,9 +246,15 @@ int run(const Options &options) {
         cudaMemcpy(device_v.data(), v.data(), bytes, cudaMemcpyHostToDevice));
     GPU_CUDA_CHECK(cudaMemset(device_output.data(), 0xFF, bytes));
 
-    attention_prefill::launch_query_tiled(device_q.data(), device_k.data(),
-                                          device_v.data(), device_output.data(),
-                                          options.problem, nullptr);
+    if (options.implementation == Implementation::query_tiled) {
+        attention_prefill::launch_query_tiled(
+            device_q.data(), device_k.data(), device_v.data(),
+            device_output.data(), options.problem, nullptr);
+    } else {
+        attention_prefill::launch_warp_per_query(
+            device_q.data(), device_k.data(), device_v.data(),
+            device_output.data(), options.problem, nullptr);
+    }
     GPU_CUDA_CHECK(cudaDeviceSynchronize());
     GPU_CUDA_CHECK(cudaMemcpy(actual.data(), device_output.data(), bytes,
                               cudaMemcpyDeviceToHost));
@@ -232,8 +265,8 @@ int run(const Options &options) {
     const std::size_t worst_query = metrics.worst_index / options.problem.d;
     const std::size_t worst_feature = metrics.worst_index % options.problem.d;
     std::cout << std::fixed << std::setprecision(6)
-              << "kernel=query-tiled shape=" << options.problem.n << 'x'
-              << options.problem.d
+              << "kernel=" << implementation_name(options.implementation)
+              << " shape=" << options.problem.n << 'x' << options.problem.d
               << " causal=" << (options.problem.causal ? 1 : 0)
               << " input_pattern=" << input_pattern_name(options.input_pattern)
               << " status=" << (passed ? "PASS" : "FAIL")

@@ -8,7 +8,7 @@
 
 namespace attention_prefill::evidence {
 
-enum class Implementation { br1, br4 };
+enum class Implementation { br1, br4, m2 };
 enum class RunMode { validate, benchmark };
 
 struct Options {

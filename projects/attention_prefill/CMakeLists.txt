@@ -87,6 +87,26 @@ add_library(attention_prefill_kernel STATIC
     kernels/query_tiled.cu
 )
 
+add_library(attention_prefill_warp_per_query STATIC
+    kernels/warp_per_query.cu
+)
+
+target_include_directories(attention_prefill_warp_per_query
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(attention_prefill_warp_per_query
+    PUBLIC
+        gpu_kernel_headers
+        CUDA::cudart
+)
+
+target_compile_options(attention_prefill_warp_per_query
+    PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:${attention_prefill_kernel_cuda_options}>
+)
+
 target_include_directories(attention_prefill_kernel
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -110,6 +130,7 @@ add_executable(attention_prefill_runner
 target_link_libraries(attention_prefill_runner
     PRIVATE
         attention_prefill_kernel
+        attention_prefill_warp_per_query
         gpu_kernel_common
         CUDA::cudart
 )
@@ -131,6 +152,7 @@ target_include_directories(attention_prefill_evidence_support
 target_link_libraries(attention_prefill_evidence_support
     PUBLIC
         attention_prefill_kernel
+        attention_prefill_warp_per_query
         flash_attention_kernels
         gpu_kernel_common
         CUDA::cudart
@@ -164,6 +186,16 @@ add_custom_command(TARGET attention_prefill_evidence_runner POST_BUILD
 )
 
 if(BUILD_TESTING)
+
+    add_test(
+        NAME attention_prefill_warp_per_query_validate
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_warp_per_query.sh
+                $<TARGET_FILE:attention_prefill_runner>
+    )
+    set_tests_properties(attention_prefill_warp_per_query_validate PROPERTIES
+        PASS_REGULAR_EXPRESSION
+            "\\[test_warp_per_query\\] summary shape_executions=126 special_executions=2 pass=128 status=PASS"
+    )
 
     add_test(
         NAME attention_prefill_source_fingerprint_tests

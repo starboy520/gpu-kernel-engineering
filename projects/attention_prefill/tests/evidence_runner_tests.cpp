@@ -107,7 +107,10 @@ void test_theory_ledger() {
         attention_prefill::evidence::Implementation::br1, {128, 64, false});
     const auto br4 = attention_prefill::evidence::theory_ledger(
         attention_prefill::evidence::Implementation::br4, {128, 64, false});
-    check(br1.cta_count == 128 && br4.cta_count == 32, "CTA count");
+    const auto m2 = attention_prefill::evidence::theory_ledger(
+        attention_prefill::evidence::Implementation::m2, {128, 64, false});
+    check(br1.cta_count == 128 && br4.cta_count == 32 && m2.cta_count == 32,
+          "CTA count");
     check(br1.requested_kv_elements == 2ULL * 128 * 128 * 64,
           "Br1 requested K/V elements");
     check(br4.requested_kv_elements == 2ULL * 32 * 128 * 64,
