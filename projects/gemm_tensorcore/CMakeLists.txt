@@ -39,6 +39,26 @@ target_compile_options(gemm_tensorcore_wmma_single
         $<$<COMPILE_LANGUAGE:CUDA>:-O3;-lineinfo;-Xptxas=-warn-spills;-Xcompiler=-Wall,-Wextra>
 )
 
+add_library(gemm_tensorcore_wmma_direct STATIC
+    kernels/wmma_direct.cu
+)
+
+target_include_directories(gemm_tensorcore_wmma_direct
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+target_link_libraries(gemm_tensorcore_wmma_direct
+    PUBLIC
+        gpu_kernel_headers
+        CUDA::cudart
+)
+
+target_compile_options(gemm_tensorcore_wmma_direct
+    PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3;-lineinfo;-Xptxas=-warn-spills;-Xcompiler=-Wall,-Wextra>
+)
+
 add_executable(gemm_tensorcore_runner
     runner/main.cu
 )
@@ -52,6 +72,23 @@ target_link_libraries(gemm_tensorcore_runner
 )
 
 target_compile_options(gemm_tensorcore_runner
+    PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3;-lineinfo;-Xcompiler=-Wall,-Wextra>
+)
+
+add_executable(gemm_tensorcore_direct_runner
+    runner/direct_main.cu
+)
+
+target_link_libraries(gemm_tensorcore_direct_runner
+    PRIVATE
+        gemm_tensorcore_common
+        gemm_tensorcore_wmma_direct
+        gpu_kernel_common
+        CUDA::cudart
+)
+
+target_compile_options(gemm_tensorcore_direct_runner
     PRIVATE
         $<$<COMPILE_LANGUAGE:CUDA>:-O3;-lineinfo;-Xcompiler=-Wall,-Wextra>
 )
